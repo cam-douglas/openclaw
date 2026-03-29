@@ -1,6 +1,10 @@
 import { DEFAULT_HEARTBEAT_ACK_MAX_CHARS, stripHeartbeatToken } from "../auto-reply/heartbeat.js";
 import { normalizeVerboseLevel } from "../auto-reply/thinking.js";
-import { isSilentReplyText, SILENT_REPLY_TOKEN } from "../auto-reply/tokens.js";
+import {
+  isSilentReplyText,
+  SILENT_REPLY_TOKEN,
+  stripSilentReplyStreamingPrefixForDisplay,
+} from "../auto-reply/tokens.js";
 import { loadConfig } from "../config/config.js";
 import { type AgentEventPayload, getAgentRunContext } from "../infra/agent-events.js";
 import { resolveHeartbeatVisibility } from "../infra/heartbeat-visibility.js";
@@ -556,7 +560,8 @@ export function createAgentEventHandler({
     if (isSilentReplyText(mergedText, SILENT_REPLY_TOKEN)) {
       return;
     }
-    if (isSilentReplyLeadFragment(mergedText)) {
+    const displayText = stripSilentReplyStreamingPrefixForDisplay(mergedText);
+    if (!displayText.trim()) {
       return;
     }
     if (shouldHideHeartbeatChatOutput(clientRunId, sourceRunId)) {
@@ -568,7 +573,7 @@ export function createAgentEventHandler({
       return;
     }
     chatRunState.deltaSentAt.set(clientRunId, now);
-    chatRunState.deltaLastBroadcastLen.set(clientRunId, mergedText.length);
+    chatRunState.deltaLastBroadcastLen.set(clientRunId, displayText.length);
     const payload = {
       runId: clientRunId,
       sessionKey,
@@ -576,7 +581,7 @@ export function createAgentEventHandler({
       state: "delta" as const,
       message: {
         role: "assistant",
-        content: [{ type: "text", text: mergedText }],
+        content: [{ type: "text", text: displayText }],
         timestamp: now,
       },
     };
@@ -593,7 +598,9 @@ export function createAgentEventHandler({
       sourceRunId,
       text: bufferedText,
     });
-    const text = normalizedHeartbeatText.text.trim();
+    const text = stripSilentReplyStreamingPrefixForDisplay(
+      normalizedHeartbeatText.text.trim(),
+    ).trim();
     const shouldSuppressSilent =
       normalizedHeartbeatText.suppress || isSilentReplyText(text, SILENT_REPLY_TOKEN);
     return { text, shouldSuppressSilent };

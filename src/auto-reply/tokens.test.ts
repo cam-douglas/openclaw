@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { isSilentReplyPrefixText, isSilentReplyText, stripSilentToken } from "./tokens.js";
+import {
+  isSilentReplyPrefixText,
+  isSilentReplyText,
+  stripSilentReplyStreamingPrefixForDisplay,
+  stripSilentToken,
+} from "./tokens.js";
 
 describe("isSilentReplyText", () => {
   it("returns true for exact token", () => {
@@ -89,6 +94,13 @@ describe("isSilentReplyPrefixText", () => {
     expect(isSilentReplyPrefixText("No")).toBe(false);
     expect(isSilentReplyPrefixText("no")).toBe(false);
     expect(isSilentReplyPrefixText("Hello")).toBe(false);
+  });
+
+  it("strips leading NO_REPLY stream prefix before substantive text", () => {
+    expect(stripSilentReplyStreamingPrefixForDisplay("NO\n\nHello")).toBe("Hello");
+    expect(stripSilentReplyStreamingPrefixForDisplay("  NO_\n\tReal answer")).toBe("Real answer");
+    expect(stripSilentReplyStreamingPrefixForDisplay("NO")).toBe("");
+    expect(stripSilentReplyStreamingPrefixForDisplay("NOTE: hi")).toBe("NOTE: hi");
   });
 
   it("keeps underscore guard for non-NO_REPLY tokens", () => {

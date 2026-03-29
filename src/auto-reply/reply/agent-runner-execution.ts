@@ -44,6 +44,7 @@ import {
   isSilentReplyPrefixText,
   isSilentReplyText,
   SILENT_REPLY_TOKEN,
+  stripSilentReplyStreamingPrefixForDisplay,
 } from "../tokens.js";
 import type { GetReplyOptions, ReplyPayload } from "../types.js";
 import {
@@ -208,6 +209,15 @@ export async function runAgentTurnWithFallback(params: {
         if (isSilentReplyText(text, SILENT_REPLY_TOKEN)) {
           return { skip: true };
         }
+        if (text) {
+          const strippedSilent = stripSilentReplyStreamingPrefixForDisplay(
+            text,
+            SILENT_REPLY_TOKEN,
+          );
+          if (strippedSilent !== text) {
+            text = strippedSilent;
+          }
+        }
         if (
           isSilentReplyPrefixText(text, SILENT_REPLY_TOKEN) ||
           isSilentReplyPrefixText(text, HEARTBEAT_TOKEN)
@@ -230,10 +240,14 @@ export async function runAgentTurnWithFallback(params: {
         return { text: sanitized, skip: false };
       };
       const handlePartialForTyping = async (payload: ReplyPayload): Promise<string | undefined> => {
-        if (isSilentReplyPrefixText(payload.text, SILENT_REPLY_TOKEN)) {
+        let partial = payload.text;
+        if (partial) {
+          partial = stripSilentReplyStreamingPrefixForDisplay(partial, SILENT_REPLY_TOKEN);
+        }
+        if (isSilentReplyPrefixText(partial, SILENT_REPLY_TOKEN)) {
           return undefined;
         }
-        const { text, skip } = normalizeStreamingText(payload);
+        const { text, skip } = normalizeStreamingText({ ...payload, text: partial });
         if (skip || !text) {
           return undefined;
         }

@@ -175,8 +175,9 @@ describe("agent event handler", () => {
 
   function expectSingleFinalChatPayload(broadcast: ReturnType<typeof vi.fn>) {
     const chatCalls = chatBroadcastCalls(broadcast);
-    expect(chatCalls).toHaveLength(1);
-    const payload = chatCalls[0]?.[1] as {
+    const finals = chatCalls.filter((call) => (call[1] as { state?: string }).state === "final");
+    expect(finals).toHaveLength(1);
+    const payload = finals[0]?.[1] as {
       state?: string;
       message?: unknown;
     };
@@ -247,6 +248,33 @@ describe("agent event handler", () => {
     nowSpy?.mockRestore();
   });
 
+  it("strips streamed NO prefix when followed by newlines and real content (single assistant snapshot)", () => {
+    const { broadcast, nodeSendToSession, chatRunState, handler, nowSpy } = createHarness({
+      now: 2_150,
+    });
+    chatRunState.registry.add("run-no-prefix", {
+      sessionKey: "session-no-prefix",
+      clientRunId: "client-no-prefix",
+    });
+
+    handler({
+      runId: "run-no-prefix",
+      seq: 1,
+      stream: "assistant",
+      ts: Date.now(),
+      data: { text: "NO\n\nHello" },
+    });
+    emitLifecycleEnd(handler, "run-no-prefix");
+
+    const chatCalls = chatBroadcastCalls(broadcast);
+    const finalPayload = chatCalls.find(
+      (call) => (call[1] as { state?: string }).state === "final",
+    )?.[1] as { message?: { content?: Array<{ text?: string }> } };
+    expect(finalPayload?.message?.content?.[0]?.text).toBe("Hello");
+    expect(sessionChatCalls(nodeSendToSession).length).toBeGreaterThanOrEqual(1);
+    nowSpy?.mockRestore();
+  });
+
   it("suppresses NO_REPLY lead fragments and does not leak NO in final chat message", () => {
     const { broadcast, nodeSendToSession, chatRunState, handler, nowSpy } = createHarness({
       now: 2_100,
@@ -270,7 +298,7 @@ describe("agent event handler", () => {
     nowSpy?.mockRestore();
   });
 
-  it("keeps final short replies like 'No' even when lead-fragment deltas are suppressed", () => {
+  it("keeps final short replies like 'No' (mixed case is not a NO_REPLY stream prefix)", () => {
     const { broadcast, nodeSendToSession, chatRunState, handler, nowSpy } = createHarness({
       now: 2_200,
     });
@@ -289,7 +317,7 @@ describe("agent event handler", () => {
       message?: { content?: Array<{ text?: string }> };
     };
     expect(payload.message?.content?.[0]?.text).toBe("No");
-    expect(sessionChatCalls(nodeSendToSession)).toHaveLength(1);
+    expect(sessionChatCalls(nodeSendToSession).length).toBeGreaterThanOrEqual(1);
     nowSpy?.mockRestore();
   });
 

@@ -124,3 +124,36 @@ export function isSilentReplyPrefixText(
   // because NO_REPLY streaming can transiently emit that fragment.
   return tokenUpper === SILENT_REPLY_TOKEN && normalized === "NO";
 }
+
+/**
+ * Remove a leading streamed prefix of `NO_REPLY` (e.g. `NO`, `NO_`, `NO_RE`) when it is
+ * followed by whitespace and then substantive text. Pure prefix-only buffers become empty.
+ *
+ * This fixes a leak where `isSilentReplyLeadFragment` matched `NO` but not `NO\\n\\nHello`
+ * because the merged buffer was no longer all-caps/underscore-only (#56779-style streaming).
+ */
+export function stripSilentReplyStreamingPrefixForDisplay(
+  text: string,
+  token: string = SILENT_REPLY_TOKEN,
+): string {
+  if (!text) {
+    return text;
+  }
+  const tokenUpper = token.toUpperCase();
+  const trimmedStart = text.trimStart();
+  const wsBefore = text.length - trimmedStart.length;
+  const m = /^([A-Z_]{2,})/.exec(trimmedStart);
+  if (!m) {
+    return text;
+  }
+  const lead = m[1];
+  if (lead === tokenUpper) {
+    return text;
+  }
+  if (!tokenUpper.startsWith(lead)) {
+    return text;
+  }
+  const afterLead = trimmedStart.slice(lead.length);
+  const rest = afterLead.replace(/^\s+/, "");
+  return (text.slice(0, wsBefore) + rest).trimStart();
+}
