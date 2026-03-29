@@ -25,9 +25,10 @@ DROPLET_IP="${DROPLET_IP:?Set DROPLET_IP in $ENV_FILE}"
 OUT_DIR="${ROOT}/.droplet"
 OUT_FILE="${OUT_DIR}/known_hosts"
 
-sudo -v
-# shellcheck disable=SC2064
-trap 'sudo -k' EXIT
+# shellcheck source=scripts/droplet-sudo-gate.sh
+source "$ROOT/scripts/droplet-sudo-gate.sh"
+droplet_sudo_gate_refresh
+droplet_sudo_revoke_on_exit
 
 mkdir -p "$OUT_DIR"
 TMP="$(mktemp)"

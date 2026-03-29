@@ -56,16 +56,16 @@ Use a clean base image (Ubuntu 24.04 LTS). Avoid third-party Marketplace 1-click
 
 ## 2) Connect via SSH
 
-From a **repo checkout** on your Mac, use the helper (it **always** runs `sudo -v` before `ssh`, then `sudo -k` when the session ends):
+From a **repo checkout** on your Mac, use the helper (it **always** runs the sudo gate before `ssh`, then `sudo -k` when the session ends; tries `sudo -n -v` first):
 
 ```bash
 ./scripts/droplet-ssh.sh
 ```
 
-For a **one-off** connection without the helper, use the same pattern (do not skip `sudo -v`):
+For a **one-off** connection without the helper, use the same pattern (do not skip the gate):
 
 ```bash
-sudo -v
+sudo -n -v 2>/dev/null || sudo -v
 ssh root@YOUR_DROPLET_IP
 sudo -k
 ```
@@ -78,7 +78,7 @@ Prefer **SSH keys** over storing a server password in `.env`.
 
 ### `openclaw … droplet` (run CLI on the VPS)
 
-With `DROPLET_IP` (and optional `SSH_USER`) in your environment, you can append **`droplet`** to almost any CLI invocation to run it **on the droplet over SSH** (after local `sudo -v`, with `sudo -k` after):
+With `DROPLET_IP` (and optional `SSH_USER`) in your environment, you can append **`droplet`** to almost any CLI invocation to run it **on the droplet over SSH** (after the local sudo gate, with `sudo -k` after):
 
 ```bash
 openclaw status droplet
@@ -128,8 +128,8 @@ This section maps **known limits** of the droplet workflow to **concrete mitigat
 
 **Mitigation:**
 
-- Prefer **`./scripts/droplet-ssh.sh`**, **`./scripts/droplet-tunnel.sh`**, **`./scripts/sync-droplet-secrets.sh`**, **`./scripts/verify-droplet-openclaw.sh`**, and **`./scripts/droplet-record-host-key.sh`** (pinned host keys) so access stays **sudo-gated** (`sudo -v` before SSH/SCP, `sudo -k` after).
-- If you use raw `ssh`/`scp`, still follow the same **sudo -v → connect → sudo -k** pattern from [Connect via SSH](#2-connect-via-ssh).
+- Prefer **`./scripts/droplet-ssh.sh`**, **`./scripts/droplet-tunnel.sh`**, **`./scripts/sync-droplet-secrets.sh`**, **`./scripts/verify-droplet-openclaw.sh`**, and **`./scripts/droplet-record-host-key.sh`** (pinned host keys) so access stays **sudo-gated** (`sudo -n`/`sudo -v` before SSH/SCP, `sudo -k` after).
+- If you use raw `ssh`/`scp`, still follow the same **sudo gate → connect → sudo -k** pattern from [Connect via SSH](#2-connect-via-ssh).
 
 ### Local `sudo -v` is a friction gate, not server authentication
 
@@ -141,6 +141,10 @@ This section maps **known limits** of the droplet workflow to **concrete mitigat
 - Rely on **host key verification** (`known_hosts`). Helpers use `StrictHostKeyChecking=accept-new` on first connect; confirm the fingerprint when prompted.
 - **Firewall the droplet** (for example UFW: allow SSH and only what you need).
 - **Harden `sshd`** (Ubuntu: `/etc/ssh/sshd_config.d/`): e.g. `PasswordAuthentication no` when using keys; keep the daemon updated via `apt`.
+
+### One Mac password prompt per droplet helper
+
+Helpers share **`scripts/droplet-sudo-gate.sh`**: they run **`sudo -n -v`** first so if you already entered your password recently (same terminal, within the sudo timestamp window), you should **not** get a second prompt. Trailing **`openclaw … droplet`** does the same before SSH. **`sync-droplet-secrets.sh`** runs the sudo gate **after** your `.env` loads and SSH client options are valid so a bad config exits before any prompt. For trusted automation only, set **`OPENCLAW_DROPLET_SUDO_GATE=0`** to skip the gate and the exit **`sudo -k`**.
 
 ### Secrets on disk and in the gateway process
 
@@ -274,7 +278,7 @@ From a repo checkout (sudo-gated):
 
 Then open `http://localhost:18789`.
 
-Without the script, use `sudo -v`, then `ssh -L 18789:localhost:18789 root@YOUR_DROPLET_IP`, then `sudo -k` when done.
+Without the script, use `sudo -n -v` or `sudo -v`, then `ssh -L 18789:localhost:18789 root@YOUR_DROPLET_IP`, then `sudo -k` when done.
 
 **Option B: Tailscale Serve (HTTPS, loopback-only)**
 
@@ -351,6 +355,10 @@ If you're hitting OOMs, consider:
 free -h
 htop
 ```
+
+### Upgrade instance size
+
+If the gateway or agents still feel sluggish, hit OOMs, or spend a lot of time in swap after [adding swap](#add-swap-recommended) and using a lighter model, **moving to a larger droplet** (more RAM and vCPU) usually helps. A 1GB instance is tight for Node, `pnpm build`, and concurrent tool-heavy sessions; 2GB or more reduces swapping and improves throughput for typical OpenClaw workloads.
 
 ---
 

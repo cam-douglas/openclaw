@@ -1,6 +1,7 @@
 /**
  * Trailing `droplet` runs the same OpenClaw CLI on the SSH host (see DROPLET_IP / SSH_USER).
- * Requires local `sudo -v` before SSH and `sudo -k` after (matches repo SSH policy).
+ * Requires local sudo refresh before SSH and revoke after (matches repo SSH policy; tries
+ * `sudo -n -v` first so a fresh timestamp does not prompt twice).
  * Limits and mitigations: docs/platforms/digitalocean.md → "Security model, limits, and mitigations".
  */
 import { spawnSync } from "node:child_process";
@@ -12,6 +13,32 @@ import dotenv from "dotenv";
 import { resolveStateDir } from "../config/paths.js";
 import { loadWorkspaceDotEnvFile } from "../infra/dotenv.js";
 import { buildDropletSshClientOptions } from "./droplet-ssh-options.js";
+
+/** Refresh sudo timestamp for droplet helpers; skip with OPENCLAW_DROPLET_SUDO_GATE=0. */
+export function refreshDropletLocalSudoGate(): void {
+  if (process.env.OPENCLAW_DROPLET_SUDO_GATE?.trim() === "0") {
+    return;
+  }
+  const cached = spawnSync("sudo", ["-n", "-v"], { stdio: "ignore" });
+  if (cached.status === 0) {
+    return;
+  }
+  const sudoV = spawnSync("sudo", ["-v"], { stdio: "inherit" });
+  if (sudoV.error) {
+    console.error("[openclaw] sudo -v failed:", sudoV.error.message);
+    process.exit(1);
+  }
+  if (sudoV.status !== 0) {
+    process.exit(sudoV.status ?? 1);
+  }
+}
+
+export function revokeDropletLocalSudoGate(): void {
+  if (process.env.OPENCLAW_DROPLET_SUDO_GATE?.trim() === "0") {
+    return;
+  }
+  spawnSync("sudo", ["-k"], { stdio: "ignore" });
+}
 
 /**
  * Global npm installs may not yet include `~/openclaw/.env` in the main CLI dotenv pass.
@@ -292,16 +319,7 @@ export function tryHandleDropletRemoteCli(argv: string[]): boolean {
     );
   }
 
-  const sudoV = spawnSync("sudo", ["-v"], { stdio: "inherit" });
-  if (sudoV.error) {
-    console.error("[openclaw] sudo -v failed:", sudoV.error.message);
-    process.exit(1);
-    return true;
-  }
-  if (sudoV.status !== 0) {
-    process.exit(sudoV.status ?? 1);
-    return true;
-  }
+  refreshDropletLocalSudoGate();
 
   let sshOpts: string[];
   try {
@@ -320,7 +338,7 @@ export function tryHandleDropletRemoteCli(argv: string[]): boolean {
   // Non-login, no-rc, clean env: avoids noisy /root/.profile, `BASH_ENV`, and inherited env dumps.
   const ssh = spawnSync("ssh", ["-t", ...sshOpts, target, sshRemoteArgv], { stdio: "inherit" });
 
-  spawnSync("sudo", ["-k"], { stdio: "ignore" });
+  revokeDropletLocalSudoGate();
 
   if (ssh.error) {
     console.error("[openclaw] ssh failed:", ssh.error.message);

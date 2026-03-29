@@ -27,8 +27,6 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
-sudo -v
-
 # shellcheck source=/dev/null
 set -a
 source "$ENV_FILE"
@@ -47,6 +45,11 @@ TARGET="${SSH_USER}@${DROPLET_IP}"
 source "$ROOT/scripts/droplet-ssh-common.sh"
 droplet_ssh_build_opts || exit 1
 
+# Prompt for sudo only after local config validates (single gate; reuses timestamp via sudo -n).
+# shellcheck source=scripts/droplet-sudo-gate.sh
+source "$ROOT/scripts/droplet-sudo-gate.sh"
+droplet_sudo_gate_refresh
+
 if [[ -n "${SSH_KEY_PW:-}" ]]; then
   export SSHPASS="$SSH_KEY_PW"
   SSH=(sshpass -e ssh "${DROPLET_SSH_OPTS[@]}")
@@ -61,13 +64,10 @@ TMP_REMOTE_AUTH="$(mktemp)"
 TMP_AUTH_OUT="$(mktemp)"
 sync_cleanup() {
   rm -f "$TMP_ENV" "$TMP_REMOTE_AUTH" "$TMP_AUTH_OUT"
-  sudo -k
+  droplet_sudo_revoke_now
 }
 trap sync_cleanup EXIT
 
-set -a
-source "$ENV_FILE"
-set +a
 python3 "$ROOT/scripts/render-droplet-systemd-env.py" >"$TMP_ENV"
 chmod 600 "$TMP_ENV"
 

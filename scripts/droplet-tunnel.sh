@@ -28,9 +28,10 @@ TARGET="${SSH_USER:-root}@${DROPLET_IP}"
 source "$ROOT/scripts/droplet-ssh-common.sh"
 droplet_ssh_build_opts || exit 1
 
-sudo -v
-# shellcheck disable=SC2064
-trap 'sudo -k' EXIT
+# shellcheck source=scripts/droplet-sudo-gate.sh
+source "$ROOT/scripts/droplet-sudo-gate.sh"
+droplet_sudo_gate_refresh
+droplet_sudo_revoke_on_exit
 
 # Do not use exec ssh — the EXIT trap must run when the tunnel ends (sudo -k).
 ssh "${DROPLET_SSH_OPTS[@]}" -o ExitOnForwardFailure=yes -L 18789:localhost:18789 -N "$TARGET"

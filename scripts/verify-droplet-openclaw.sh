@@ -32,9 +32,10 @@ REMOTE_BIN="${OPENCLAW_REMOTE_BIN:-openclaw}"
 source "$ROOT/scripts/droplet-ssh-common.sh"
 droplet_ssh_build_opts || exit 1
 
-sudo -v
-# shellcheck disable=SC2064
-trap 'sudo -k' EXIT
+# shellcheck source=scripts/droplet-sudo-gate.sh
+source "$ROOT/scripts/droplet-sudo-gate.sh"
+droplet_sudo_gate_refresh
+droplet_sudo_revoke_on_exit
 
 RB_Q="$(printf '%q' "$REMOTE_BIN")"
 ssh "${DROPLET_SSH_OPTS[@]}" "$TARGET" \
