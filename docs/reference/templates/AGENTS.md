@@ -126,13 +126,15 @@ Skills provide your tools. When you need one, check its `SKILL.md`. Keep local n
 
 ### Project `.env` on the gateway host (for example Moonshot Engine)
 
-If this workspace is a **project checkout on the gateway machine** (such as Moonshot Engine under the OpenClaw workspace on a droplet), **this project’s** env-backed keys live in **`<workspace root>/.env`**: the same directory as this `AGENTS.md` (and `SOUL.md`, `USER.md`, etc.). When you need to read or reference keys for **this project’s** tools and scripts, use that path.
+If this workspace is a **project checkout on the gateway machine** (such as Moonshot Engine under the OpenClaw workspace on a droplet), **this project’s** env-backed keys live in **`<project root>/.env`**: the same directory as this `AGENTS.md` (and `SOUL.md`, `USER.md`, etc.). When you need to read or reference keys for **this project’s** tools and scripts, use that path.
+
+There should be **only one** Moonshot Engine checkout. On a droplet it lives under **`projects/moonshot-engine`** inside the OpenClaw workspace (not directly under the workspace root next to the main `AGENTS.md`).
 
 **Typical DigitalOcean droplet (gateway user `root`, default workspace `~/.openclaw/workspace`):** the Moonshot Engine project `.env` is:
 
-`/root/.openclaw/workspace/moonshot-engine/.env`
+`/root/.openclaw/workspace/projects/moonshot-engine/.env`
 
-If `agents.defaults.workspace` is customized, replace the prefix so the path is `<configured-workspace>/moonshot-engine/.env`.
+If `agents.defaults.workspace` is customized, replace the prefix so the path is `<configured-workspace>/projects/moonshot-engine/.env`.
 
 Do **not** treat these legacy locations as the primary source for **this project’s** keys: `~/.config/openclaw/...` JSON, or `~/.openclaw/.env` on the server (the droplet secrets sync intentionally removes the latter to avoid duplicate stores). Those paths are not a substitute for the **project root** `.env`.
 
