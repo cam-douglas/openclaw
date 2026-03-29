@@ -6,11 +6,13 @@ Docs: https://docs.openclaw.ai
 
 ### Changes
 
+- Droplet/macOS: after `openclaw … droplet` SSH completes, play the system sound Funk by default (`OPENCLAW_DROPLET_COMPLETION_SOUND=0` to disable; optional path and success-only env vars).
 - Droplet helpers: share a single sudo gate with **one** `sudo -v` (removed `sudo -n -v` prefix that could double-prompt on macOS), run the sync script gate only after local env/SSH options validate, and allow `OPENCLAW_DROPLET_SUDO_GATE=0` for automation; `openclaw … droplet` matches.
 - LINE/outbound media: add LINE image, video, and audio outbound sends on the LINE-specific delivery path, including explicit preview/tracking handling for videos while keeping generic media sends on the existing image-only route. (#45826) Thanks @masatohoshino.
 
 ### Fixes
 
+- Exec approvals: natural-language replies (for example ok, go ahead, yes please, cancel) resolve pending dangerous/exec approvals; when the pending request is tied to a different session (such as a subagent), yes/no now falls back to the latest pending approval for the same agent id.
 - LINE/ACP: add current-conversation binding and inbound binding-routing parity so `/acp spawn ... --thread here`, configured ACP bindings, and active conversation-bound ACP sessions work on LINE like the other conversation channels.
 - LINE/markdown: preserve underscores inside Latin, Cyrillic, and CJK words when stripping markdown, while still removing standalone `_italic_` markers on the shared text-runtime path used by LINE and TTS. (#47465) Thanks @jackjin1997.
 - TTS/Microsoft: auto-switch the default Edge voice to Chinese for CJK-dominant text without overriding explicitly selected Microsoft voices. (#52355) Thanks @extrasmall0.

@@ -408,6 +408,53 @@ export function createExecApprovalHandlers(
         undefined,
       );
     },
+    "exec.approval.peekAgent": async ({ params, respond }) => {
+      if (!params || typeof params !== "object" || Array.isArray(params)) {
+        respond(
+          false,
+          undefined,
+          errorShape(ErrorCodes.INVALID_REQUEST, "invalid exec.approval.peekAgent params"),
+        );
+        return;
+      }
+      const rawAgentId = (params as { agentId?: unknown }).agentId;
+      if (typeof rawAgentId !== "string" || !rawAgentId.trim()) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, "agentId is required"));
+        return;
+      }
+      const agentId = rawAgentId.trim();
+      const pending = manager.getPendingForAgent(agentId);
+      const latest = pending.length > 0 ? pending[pending.length - 1] : null;
+      if (!latest) {
+        respond(
+          true,
+          {
+            ok: true,
+            agentId,
+            pendingCount: 0,
+            latest: null,
+          },
+          undefined,
+        );
+        return;
+      }
+      respond(
+        true,
+        {
+          ok: true,
+          agentId,
+          pendingCount: pending.length,
+          latest: {
+            id: latest.id,
+            command: latest.request.command,
+            host: latest.request.host ?? null,
+            createdAtMs: latest.createdAtMs,
+            expiresAtMs: latest.expiresAtMs,
+          },
+        },
+        undefined,
+      );
+    },
     "exec.approval.batch.start": async ({ params, respond }) => {
       const parsed = parseBatchSessionKey(params);
       if (!parsed.ok) {

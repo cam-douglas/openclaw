@@ -3,6 +3,7 @@ import type {
   ExecApprovalDecision,
   ExecApprovalRequestPayload as InfraExecApprovalRequestPayload,
 } from "../infra/exec-approvals.js";
+import { normalizeAgentId, resolveAgentIdFromSessionKey } from "../routing/session-key.js";
 
 // Grace period to keep resolved entries for late awaitDecision calls
 const RESOLVED_ENTRY_GRACE_MS = 15_000;
@@ -347,6 +348,44 @@ export class ExecApprovalManager<TPayload = ExecApprovalRequestPayload> {
     sessionKey: string | null | undefined,
   ): ExecApprovalRecord<TPayload> | null {
     const pending = this.getPendingForSession(sessionKey);
+    return pending.length > 0 ? pending[pending.length - 1] : null;
+  }
+
+  /**
+   * Pending exec approvals whose `agentId` or session key resolves to the same agent id.
+   * Used when the operator replies in a chat/session that does not match the pending approval
+   * (for example subagent runs) so natural-language yes/no can still resolve the latest request.
+   */
+  getPendingForAgent(agentId: string | null | undefined): ExecApprovalRecord<TPayload>[] {
+    const normalized =
+      typeof agentId === "string" && agentId.trim() ? normalizeAgentId(agentId) : null;
+    if (!normalized) {
+      return [];
+    }
+    return [...this.pending.values()]
+      .map((entry) => entry.record)
+      .filter((record) => {
+        if (record.resolvedAtMs !== undefined) {
+          return false;
+        }
+        const request = record.request as { agentId?: unknown; sessionKey?: unknown };
+        const rid = typeof request.agentId === "string" ? normalizeAgentId(request.agentId) : null;
+        if (rid === normalized) {
+          return true;
+        }
+        const sk = this.getRecordSessionKey(record);
+        if (sk && resolveAgentIdFromSessionKey(sk) === normalized) {
+          return true;
+        }
+        return false;
+      })
+      .toSorted((left, right) => left.createdAtMs - right.createdAtMs);
+  }
+
+  getLatestPendingForAgent(
+    agentId: string | null | undefined,
+  ): ExecApprovalRecord<TPayload> | null {
+    const pending = this.getPendingForAgent(agentId);
     return pending.length > 0 ? pending[pending.length - 1] : null;
   }
 }

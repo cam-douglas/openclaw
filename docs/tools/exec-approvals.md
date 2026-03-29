@@ -361,6 +361,8 @@ Reply in chat:
 /approve <id> deny
 ```
 
+Natural-language replies also work for the **latest pending exec approval**: short affirmations or denials such as `yes`, `ok`, `go ahead`, `nope`, or `cancel` (not only the exact `/approve` form above). Resolution is scoped to your current session first; if nothing is pending for that session, the gateway falls back to the latest pending approval for the **same agent** (for example when a subagent requested approval and you reply in the parent chat).
+
 The `/approve` command handles both exec approvals and plugin approvals. If the ID does not match a pending exec approval, it automatically checks plugin approvals.
 
 ### Batch approvals in chat

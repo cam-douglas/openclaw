@@ -10,6 +10,7 @@ import {
   isTelegramExecApprovalAuthorizedSender,
   isTelegramExecApprovalApprover,
 } from "../../plugin-sdk/telegram-runtime.js";
+import { resolveAgentIdFromSessionKey } from "../../routing/session-key.js";
 import { GATEWAY_CLIENT_MODES, GATEWAY_CLIENT_NAMES } from "../../utils/message-channel.js";
 import { requireGatewayClientScopeForInternalChannel } from "./command-gates.js";
 import type { CommandHandler } from "./commands-types.js";
@@ -40,15 +41,76 @@ type ParsedApproveBatchCommand =
   | { ok: true; action: "start" | "review" | "run" | "deny" }
   | { ok: false; error: string };
 
-function parseApproveQuickDecision(raw: string): ExecApprovalDecision | null {
-  const trimmed = raw.trim().toLowerCase();
+/** Exported for tests: map natural-language replies to exec approval decisions. */
+export function parseApproveQuickDecision(raw: string): ExecApprovalDecision | null {
+  const trimmed = raw.trim();
   if (trimmed.startsWith("/")) {
     return null;
   }
-  if (trimmed === "yes" || trimmed === "y") {
+  const normalized = trimmed
+    .replace(/[.!?？]+$/gu, "")
+    .trim()
+    .toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  const allowOnce = new Set([
+    "yes",
+    "y",
+    "yeah",
+    "yep",
+    "yup",
+    "ok",
+    "okay",
+    "k",
+    "kk",
+    "sure",
+    "fine",
+    "approve",
+    "approved",
+    "allow",
+    "proceed",
+    "confirm",
+    "confirmed",
+    "continue",
+    "go ahead",
+    "go for it",
+    "do it",
+    "run it",
+    "please do",
+    "sounds good",
+  ]);
+  const deny = new Set([
+    "no",
+    "n",
+    "nope",
+    "nah",
+    "deny",
+    "denied",
+    "reject",
+    "rejected",
+    "stop",
+    "cancel",
+    "abort",
+    "decline",
+    "don't",
+    "dont",
+    "do not",
+  ]);
+  if (allowOnce.has(normalized)) {
     return "allow-once";
   }
-  if (trimmed === "no" || trimmed === "n") {
+  if (deny.has(normalized)) {
+    return "deny";
+  }
+  if (
+    normalized.startsWith("yes ") ||
+    normalized.startsWith("yep ") ||
+    normalized.startsWith("yeah ")
+  ) {
+    return "allow-once";
+  }
+  if (normalized.startsWith("no ") || normalized.startsWith("nope ")) {
     return "deny";
   }
   return null;
@@ -341,7 +403,7 @@ export const handleApproveQuickCommand: CommandHandler = async (params, allowTex
   }
   const resolvedBy = buildResolvedByLabel(params);
   try {
-    const peek = (await callGateway({
+    const peekSession = (await callGateway({
       method: "exec.approval.peekSession",
       params: { sessionKey: params.sessionKey },
       clientName: GATEWAY_CLIENT_NAMES.GATEWAY_CLIENT,
@@ -353,10 +415,41 @@ export const handleApproveQuickCommand: CommandHandler = async (params, allowTex
       } | null;
       pendingCount?: unknown;
     };
-    const latestId =
-      peek?.latest && typeof peek.latest === "object" && typeof peek.latest.id === "string"
-        ? peek.latest.id
+    let latestId =
+      peekSession?.latest &&
+      typeof peekSession.latest === "object" &&
+      typeof peekSession.latest.id === "string"
+        ? peekSession.latest.id
         : "";
+    let pendingCount: number | undefined =
+      typeof peekSession?.pendingCount === "number" && Number.isFinite(peekSession.pendingCount)
+        ? Math.max(0, Math.floor(peekSession.pendingCount))
+        : undefined;
+    if (!latestId) {
+      const agentId = resolveAgentIdFromSessionKey(params.sessionKey);
+      const peekAgent = (await callGateway({
+        method: "exec.approval.peekAgent",
+        params: { agentId },
+        clientName: GATEWAY_CLIENT_NAMES.GATEWAY_CLIENT,
+        clientDisplayName: `Chat approval (${resolvedBy})`,
+        mode: GATEWAY_CLIENT_MODES.BACKEND,
+      })) as {
+        latest?: {
+          id?: unknown;
+        } | null;
+        pendingCount?: unknown;
+      };
+      latestId =
+        peekAgent?.latest &&
+        typeof peekAgent.latest === "object" &&
+        typeof peekAgent.latest.id === "string"
+          ? peekAgent.latest.id
+          : "";
+      pendingCount =
+        typeof peekAgent?.pendingCount === "number" && Number.isFinite(peekAgent.pendingCount)
+          ? Math.max(0, Math.floor(peekAgent.pendingCount))
+          : pendingCount;
+    }
     if (!latestId) {
       return null;
     }
@@ -367,13 +460,9 @@ export const handleApproveQuickCommand: CommandHandler = async (params, allowTex
       clientDisplayName: `Chat approval (${resolvedBy})`,
       mode: GATEWAY_CLIENT_MODES.BACKEND,
     });
-    const pendingCount =
-      typeof peek?.pendingCount === "number" && Number.isFinite(peek.pendingCount)
-        ? Math.max(0, Math.floor(peek.pendingCount))
-        : undefined;
     const remainingHint =
       typeof pendingCount === "number" && pendingCount > 1
-        ? ` (${pendingCount - 1} more pending in this session)`
+        ? ` (${pendingCount - 1} more pending)`
         : "";
     if (decision === "allow-once") {
       return {

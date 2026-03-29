@@ -36,6 +36,39 @@ export function revokeDropletLocalSudoGate(): void {
   spawnSync("sudo", ["-k"], { stdio: "ignore" });
 }
 
+/** Default macOS system sound for `openclaw … droplet` completion (Funk). */
+export const DEFAULT_DROPLET_COMPLETION_SOUND_PATH = "/System/Library/Sounds/Funk.aiff";
+
+/**
+ * Play a local completion chime after the remote `openclaw … droplet` SSH session ends.
+ * macOS only (`afplay`). Disabled with `OPENCLAW_DROPLET_COMPLETION_SOUND=0`.
+ * Optional: `OPENCLAW_DROPLET_COMPLETION_SOUND_PATH`, `OPENCLAW_DROPLET_COMPLETION_SOUND_SUCCESS_ONLY=1`.
+ */
+export function playDropletRemoteCompletionChime(sshExitStatus: number | null): void {
+  if (process.env.OPENCLAW_DROPLET_COMPLETION_SOUND?.trim() === "0") {
+    return;
+  }
+  if (process.platform !== "darwin") {
+    return;
+  }
+  if (process.env.OPENCLAW_DROPLET_COMPLETION_SOUND_SUCCESS_ONLY?.trim() === "1") {
+    if (sshExitStatus !== 0) {
+      return;
+    }
+  }
+  const soundPath =
+    process.env.OPENCLAW_DROPLET_COMPLETION_SOUND_PATH?.trim() ||
+    DEFAULT_DROPLET_COMPLETION_SOUND_PATH;
+  if (!soundPath) {
+    return;
+  }
+  try {
+    spawnSync("afplay", [soundPath], { stdio: "ignore" });
+  } catch {
+    // Missing afplay or unreadable path: ignore.
+  }
+}
+
 /**
  * Global npm installs may not yet include `~/openclaw/.env` in the main CLI dotenv pass.
  * Load it here so `openclaw tui droplet` works from $HOME with secrets only in the checkout.
@@ -333,6 +366,10 @@ export function tryHandleDropletRemoteCli(argv: string[]): boolean {
   });
   // Non-login, no-rc, clean env: avoids noisy /root/.profile, `BASH_ENV`, and inherited env dumps.
   const ssh = spawnSync("ssh", ["-t", ...sshOpts, target, sshRemoteArgv], { stdio: "inherit" });
+
+  if (!ssh.error) {
+    playDropletRemoteCompletionChime(ssh.status ?? null);
+  }
 
   revokeDropletLocalSudoGate();
 

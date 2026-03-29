@@ -30,6 +30,7 @@ const BASE_METHODS = [
   "exec.approval.waitDecision",
   "exec.approval.resolve",
   "exec.approval.peekSession",
+  "exec.approval.peekAgent",
   "exec.approval.batch.start",
   "exec.approval.batch.review",
   "exec.approval.batch.run",

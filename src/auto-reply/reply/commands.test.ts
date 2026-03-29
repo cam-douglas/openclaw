@@ -130,6 +130,7 @@ const { parseConfigCommand } = await import("./config-commands.js");
 const { parseDebugCommand } = await import("./debug-commands.js");
 const { parseInlineDirectives } = await import("./directive-handling.js");
 const { buildCommandContext, handleCommands } = await import("./commands.js");
+const { parseApproveQuickDecision } = await import("./commands-approve.js");
 
 let testWorkspaceDir = os.tmpdir();
 
@@ -1013,6 +1014,17 @@ describe("/approve command", () => {
   });
 });
 
+describe("parseApproveQuickDecision", () => {
+  it("accepts common natural-language affirmations and denials", () => {
+    expect(parseApproveQuickDecision("ok")).toBe("allow-once");
+    expect(parseApproveQuickDecision("go ahead")).toBe("allow-once");
+    expect(parseApproveQuickDecision("Yes please.")).toBe("allow-once");
+    expect(parseApproveQuickDecision("nope")).toBe("deny");
+    expect(parseApproveQuickDecision("cancel")).toBe("deny");
+    expect(parseApproveQuickDecision("/approve x")).toBe(null);
+  });
+});
+
 describe("yes/no exec approval quick replies", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1052,6 +1064,53 @@ describe("yes/no exec approval quick replies", () => {
     );
   });
 
+  it("falls back to peekAgent when session has no pending but agent does (e.g. subagent exec)", async () => {
+    const cfg = {
+      commands: { text: true },
+      channels: { whatsapp: { allowFrom: ["*"] } },
+    } as OpenClawConfig;
+    const params = buildParams("ok", cfg, { SenderId: "123" });
+    callGatewayMock
+      .mockResolvedValueOnce({
+        ok: true,
+        sessionKey: "agent:main:main",
+        pendingCount: 0,
+        latest: null,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        agentId: "main",
+        pendingCount: 1,
+        latest: { id: "req-subagent-1" },
+      })
+      .mockResolvedValueOnce({ ok: true });
+
+    const result = await handleCommands(params);
+    expect(result.shouldContinue).toBe(false);
+    expect(result.reply?.text).toContain("Approved latest exec request");
+    expect(callGatewayMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        method: "exec.approval.peekSession",
+        params: { sessionKey: "agent:main:main" },
+      }),
+    );
+    expect(callGatewayMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        method: "exec.approval.peekAgent",
+        params: { agentId: "main" },
+      }),
+    );
+    expect(callGatewayMock).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        method: "exec.approval.resolve",
+        params: { id: "req-subagent-1", decision: "allow-once" },
+      }),
+    );
+  });
+
   it("maps no to deny and ignores quick reply when no pending approval exists", async () => {
     const cfg = {
       commands: { text: true },
@@ -1079,20 +1138,35 @@ describe("yes/no exec approval quick replies", () => {
     );
 
     callGatewayMock.mockReset();
-    callGatewayMock.mockResolvedValueOnce({
-      ok: true,
-      sessionKey: "agent:main:main",
-      pendingCount: 0,
-      latest: null,
-    });
+    callGatewayMock
+      .mockResolvedValueOnce({
+        ok: true,
+        sessionKey: "agent:main:main",
+        pendingCount: 0,
+        latest: null,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        agentId: "main",
+        pendingCount: 0,
+        latest: null,
+      });
     const noPendingParams = buildParams("y", cfg, { SenderId: "123" });
     const noPendingResult = await handleCommands(noPendingParams);
     expect(noPendingResult.shouldContinue).toBe(true);
     expect(noPendingResult.reply).toBeUndefined();
-    expect(callGatewayMock).toHaveBeenCalledTimes(1);
-    expect(callGatewayMock).toHaveBeenCalledWith(
+    expect(callGatewayMock).toHaveBeenCalledTimes(2);
+    expect(callGatewayMock).toHaveBeenNthCalledWith(
+      1,
       expect.objectContaining({
         method: "exec.approval.peekSession",
+      }),
+    );
+    expect(callGatewayMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        method: "exec.approval.peekAgent",
+        params: { agentId: "main" },
       }),
     );
   });

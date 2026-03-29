@@ -1,18 +1,119 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os, { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("node:child_process", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("node:child_process")>();
+  const real = mod.spawnSync.bind(mod);
+  return {
+    ...mod,
+    spawnSync: vi.fn(
+      (
+        command: string,
+        args?: readonly string[],
+        options?: import("node:child_process").SpawnSyncOptions,
+      ) => {
+        if (command === "afplay") {
+          return {
+            status: 0,
+            pid: 1,
+            output: [] as Array<Buffer | null>,
+            stdout: Buffer.alloc(0),
+            stderr: Buffer.alloc(0),
+            signal: null,
+          };
+        }
+        return real(command, args as string[], options);
+      },
+    ) as unknown as typeof mod.spawnSync,
+  };
+});
+
+import * as childProcess from "node:child_process";
 import {
   applyDropletTuiDefaultSession,
   bashSingleQuoteWord,
   buildDropletRemoteBashLcLine,
   buildDropletRemoteEnvPrefix,
   buildDropletRemoteSshShellCommand,
+  DEFAULT_DROPLET_COMPLETION_SOUND_PATH,
   dropletRemoteHomeForUser,
   mergeDropletForwardGatewayEnvFromEnvFiles,
+  playDropletRemoteCompletionChime,
   stripTrailingDroplet,
   tryLoadDropletIpFromHomeCheckoutEnv,
 } from "./droplet-remote.js";
+
+const mockedSpawnSync = vi.mocked(childProcess.spawnSync);
+
+describe("playDropletRemoteCompletionChime", () => {
+  const originalPlatform = process.platform;
+
+  beforeEach(() => {
+    mockedSpawnSync.mockClear();
+  });
+
+  afterEach(() => {
+    Object.defineProperty(process, "platform", { value: originalPlatform });
+    delete process.env.OPENCLAW_DROPLET_COMPLETION_SOUND;
+    delete process.env.OPENCLAW_DROPLET_COMPLETION_SOUND_PATH;
+    delete process.env.OPENCLAW_DROPLET_COMPLETION_SOUND_SUCCESS_ONLY;
+  });
+
+  it("does not call afplay on non-darwin", () => {
+    Object.defineProperty(process, "platform", { value: "linux" });
+    playDropletRemoteCompletionChime(0);
+    expect(mockedSpawnSync).not.toHaveBeenCalledWith(
+      "afplay",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("does not call afplay when OPENCLAW_DROPLET_COMPLETION_SOUND=0", () => {
+    Object.defineProperty(process, "platform", { value: "darwin" });
+    process.env.OPENCLAW_DROPLET_COMPLETION_SOUND = "0";
+    playDropletRemoteCompletionChime(0);
+    expect(mockedSpawnSync).not.toHaveBeenCalledWith(
+      "afplay",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("calls afplay with Funk path on darwin by default", () => {
+    Object.defineProperty(process, "platform", { value: "darwin" });
+    playDropletRemoteCompletionChime(0);
+    expect(mockedSpawnSync).toHaveBeenCalledWith(
+      "afplay",
+      [DEFAULT_DROPLET_COMPLETION_SOUND_PATH],
+      {
+        stdio: "ignore",
+      },
+    );
+  });
+
+  it("skips when SUCCESS_ONLY and non-zero exit", () => {
+    Object.defineProperty(process, "platform", { value: "darwin" });
+    process.env.OPENCLAW_DROPLET_COMPLETION_SOUND_SUCCESS_ONLY = "1";
+    playDropletRemoteCompletionChime(1);
+    expect(mockedSpawnSync).not.toHaveBeenCalledWith(
+      "afplay",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("uses custom path when set", () => {
+    Object.defineProperty(process, "platform", { value: "darwin" });
+    process.env.OPENCLAW_DROPLET_COMPLETION_SOUND_PATH = "/custom/sound.aiff";
+    playDropletRemoteCompletionChime(0);
+    expect(mockedSpawnSync).toHaveBeenCalledWith("afplay", ["/custom/sound.aiff"], {
+      stdio: "ignore",
+    });
+  });
+});
 
 describe("stripTrailingDroplet", () => {
   it("does not strip without droplet suffix", () => {
@@ -109,6 +210,7 @@ describe("tryLoadDropletIpFromHomeCheckoutEnv", () => {
   });
 
   it("loads DROPLET_IP from ~/openclaw/.env when unset", () => {
+    delete process.env.DROPLET_IP;
     const fakeHome = mkdtempSync(join(tmpdir(), "oc-home-"));
     const envPath = join(fakeHome, "openclaw", ".env");
     mkdirSync(join(fakeHome, "openclaw"), { recursive: true });
@@ -231,7 +333,11 @@ describe("buildDropletRemoteBashLcLine", () => {
   });
 
   it("resolves bare bin name to a real file before exec (avoids openclaw repo dir)", () => {
-    const line = buildDropletRemoteBashLcLine("openclaw", ["doctor", "--non-interactive"]);
+    const line = buildDropletRemoteBashLcLine(
+      "openclaw",
+      ["doctor", "--non-interactive"],
+      {} as NodeJS.ProcessEnv,
+    );
     expect(line).toContain("_name='openclaw'");
     expect(line).toContain('for _c in "$HOME/.local/share/pnpm/$_name"');
     expect(line).toContain("npm config get prefix");
@@ -241,7 +347,9 @@ describe("buildDropletRemoteBashLcLine", () => {
   });
 
   it("uses direct exec when remote bin is an absolute path", () => {
-    expect(buildDropletRemoteBashLcLine("/usr/local/bin/openclaw", ["doctor"])).toBe(
+    expect(
+      buildDropletRemoteBashLcLine("/usr/local/bin/openclaw", ["doctor"], {} as NodeJS.ProcessEnv),
+    ).toBe(
       `export PATH="$HOME/.local/share/pnpm:$HOME/.local/bin:/usr/local/bin:/usr/local/sbin:/usr/bin:/bin:/sbin:$PATH"; exec '/usr/local/bin/openclaw' 'doctor'`,
     );
   });
