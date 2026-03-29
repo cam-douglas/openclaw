@@ -93,7 +93,7 @@ export function isSilentReplyPrefixText(
   if (!text) {
     return false;
   }
-  const trimmed = text.trimStart();
+  const trimmed = text.trim();
   if (!trimmed) {
     return false;
   }

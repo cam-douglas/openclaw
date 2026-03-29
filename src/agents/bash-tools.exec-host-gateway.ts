@@ -10,6 +10,7 @@ import {
   requiresExecApproval,
   resolveAllowAlwaysPatterns,
 } from "../infra/exec-approvals.js";
+import { detectDangerousExecCommand } from "../infra/exec-dangerous-command.js";
 import {
   describeInterpreterInlineEval,
   detectInterpreterInlineEvalArgv,
@@ -125,9 +126,18 @@ export async function processGatewayAllowlist(
     enforcedCommand = enforced.command;
   }
   const obfuscation = detectCommandObfuscation(params.command);
+  const dangerous = detectDangerousExecCommand({
+    command: params.command,
+    segments: allowlistEval.segments,
+  });
   if (obfuscation.detected) {
     logInfo(`exec: obfuscation detected (gateway): ${obfuscation.reasons.join(", ")}`);
     params.warnings.push(`⚠️ Obfuscated command detected: ${obfuscation.reasons.join("; ")}`);
+  }
+  if (dangerous.detected) {
+    params.warnings.push(
+      `⚠️ Dangerous command class detected: ${dangerous.reasons.join("; ")}. Explicit approval is required.`,
+    );
   }
   const recordMatchedAllowlistUse = (resolvedPath?: string) => {
     if (allowlistMatches.length === 0) {
@@ -157,7 +167,8 @@ export async function processGatewayAllowlist(
     }) ||
     requiresHeredocApproval ||
     requiresInlineEvalApproval ||
-    obfuscation.detected;
+    obfuscation.detected ||
+    dangerous.detected;
   if (requiresHeredocApproval) {
     params.warnings.push(
       "Warning: heredoc execution requires explicit approval in allowlist mode.",
@@ -255,7 +266,12 @@ export async function processGatewayAllowlist(
         approvedByAsk = true;
       } else if (decision === "allow-always") {
         approvedByAsk = true;
-        if (hostSecurity === "allowlist" && !requiresInlineEvalApproval) {
+        if (dangerous.detected) {
+          // Never persist dangerous command approvals as allow-always.
+          params.warnings.push(
+            "Warning: dangerous commands are treated as allow-once only, not allow-always.",
+          );
+        } else if (hostSecurity === "allowlist" && !requiresInlineEvalApproval) {
           const patterns = resolveAllowAlwaysPatterns({
             segments: allowlistEval.segments,
             cwd: params.workdir,

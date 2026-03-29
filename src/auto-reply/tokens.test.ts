@@ -76,6 +76,8 @@ describe("stripSilentToken", () => {
 describe("isSilentReplyPrefixText", () => {
   it("matches uppercase token lead fragments", () => {
     expect(isSilentReplyPrefixText("NO")).toBe(true);
+    expect(isSilentReplyPrefixText("NO\n")).toBe(true);
+    expect(isSilentReplyPrefixText(" NO\t ")).toBe(true);
     expect(isSilentReplyPrefixText("NO_")).toBe(true);
     expect(isSilentReplyPrefixText("NO_RE")).toBe(true);
     expect(isSilentReplyPrefixText("NO_REPLY")).toBe(true);

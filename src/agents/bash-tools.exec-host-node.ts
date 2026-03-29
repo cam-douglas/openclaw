@@ -8,6 +8,7 @@ import {
   requiresExecApproval,
   resolveExecApprovalsFromFile,
 } from "../infra/exec-approvals.js";
+import { detectDangerousExecCommand } from "../infra/exec-dangerous-command.js";
 import {
   describeInterpreterInlineEval,
   detectInterpreterInlineEvalArgv,
@@ -184,11 +185,20 @@ export async function executeNodeHostCommand(
     }
   }
   const obfuscation = detectCommandObfuscation(params.command);
+  const dangerous = detectDangerousExecCommand({
+    command: params.command,
+    segments: baseAllowlistEval.segments,
+  });
   if (obfuscation.detected) {
     logInfo(
       `exec: obfuscation detected (node=${nodeQuery ?? "default"}): ${obfuscation.reasons.join(", ")}`,
     );
     params.warnings.push(`⚠️ Obfuscated command detected: ${obfuscation.reasons.join("; ")}`);
+  }
+  if (dangerous.detected) {
+    params.warnings.push(
+      `⚠️ Dangerous command class detected: ${dangerous.reasons.join("; ")}. Explicit approval is required.`,
+    );
   }
   const requiresAsk =
     requiresExecApproval({
@@ -198,7 +208,8 @@ export async function executeNodeHostCommand(
       allowlistSatisfied,
     }) ||
     inlineEvalHit !== null ||
-    obfuscation.detected;
+    obfuscation.detected ||
+    dangerous.detected;
   const invokeTimeoutMs = Math.max(
     10_000,
     (typeof params.timeoutSec === "number" ? params.timeoutSec : params.defaultTimeoutSec) * 1000 +
@@ -312,7 +323,7 @@ export async function executeNodeHostCommand(
         approvalDecision = "allow-once";
       } else if (decision === "allow-always") {
         approvedByAsk = true;
-        approvalDecision = "allow-always";
+        approvalDecision = dangerous.detected ? "allow-once" : "allow-always";
       }
 
       if (deniedReason) {
