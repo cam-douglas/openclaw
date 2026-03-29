@@ -1217,6 +1217,7 @@ export async function runEmbeddedAttempt(
         });
       };
 
+      let abortedFromRateLimitLifecycle = false;
       const subscription = subscribeEmbeddedPiSession({
         session: activeSession,
         runId: params.runId,
@@ -1235,7 +1236,20 @@ export async function runEmbeddedAttempt(
         blockReplyChunking: params.blockReplyChunking,
         onPartialReply: params.onPartialReply,
         onAssistantMessageStart: params.onAssistantMessageStart,
-        onAgentEvent: params.onAgentEvent,
+        onAgentEvent: (evt) => {
+          const phase = evt?.stream === "lifecycle" ? evt.data?.phase : undefined;
+          const failoverReason = evt?.stream === "lifecycle" ? evt.data?.failoverReason : undefined;
+          if (
+            !abortedFromRateLimitLifecycle &&
+            phase === "error" &&
+            failoverReason === "rate_limit"
+          ) {
+            abortedFromRateLimitLifecycle = true;
+            // Stop pi-agent-core's internal 429 retry loop after the first provider rejection.
+            abortRun(false, "rate_limit_lifecycle");
+          }
+          return params.onAgentEvent?.(evt);
+        },
         enforceFinalTag: params.enforceFinalTag,
         config: params.config,
         sessionKey: sandboxSessionKey,

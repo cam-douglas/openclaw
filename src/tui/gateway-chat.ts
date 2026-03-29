@@ -333,7 +333,8 @@ export async function resolveGatewayConnection(
             config,
           });
 
-    const token = explicitAuth.token ?? remoteToken.value;
+    // Match gateway credential precedence: remote-first for remote.gateway token, then env fallback.
+    const token = explicitAuth.token ?? remoteToken.value ?? envToken;
     const password = explicitAuth.password ?? envPassword ?? remotePassword.value;
     if (!token && !password) {
       throwGatewayAuthResolutionError(
@@ -396,7 +397,9 @@ export async function resolveGatewayConnection(
           env,
           config,
         });
-    const token = explicitAuth.token ?? localToken.value ?? envToken;
+    // Match non-gateway CLI defaults (env-first): forwarded OPENCLAW_GATEWAY_TOKEN must win over a
+    // stale gateway.auth.token on the SSH host (e.g. `openclaw tui droplet`).
+    const token = explicitAuth.token ?? envToken ?? localToken.value;
     if (!token) {
       throwGatewayAuthResolutionError(
         localToken.unresolvedRefReason ?? "Missing gateway auth token.",
@@ -428,7 +431,7 @@ export async function resolveGatewayConnection(
           env,
           config,
         });
-    const password = explicitAuth.password ?? localPassword.value ?? envPassword;
+    const password = explicitAuth.password ?? envPassword ?? localPassword.value;
     if (!password) {
       throwGatewayAuthResolutionError(
         localPassword.unresolvedRefReason ?? "Missing gateway auth password.",

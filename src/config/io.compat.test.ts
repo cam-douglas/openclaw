@@ -207,4 +207,35 @@ describe("config io paths", () => {
     const touchedVersion = `${parsedVersion.major}.${parsedVersion.minor}.${parsedVersion.patch}-beta.1`;
     await expectNoNewerVersionWarning(touchedVersion);
   });
+
+  it("warns at most once per config path when touched by a newer OpenClaw", async () => {
+    await withTempHome(async (home) => {
+      const configDir = path.join(home, ".openclaw");
+      await fs.mkdir(configDir, { recursive: true });
+      const configPath = path.join(configDir, "openclaw.json");
+      await fs.writeFile(
+        configPath,
+        JSON.stringify({ meta: { lastTouchedVersion: "2099.12.31" } }, null, 2),
+      );
+
+      const logger = {
+        warn: vi.fn(),
+        error: vi.fn(),
+      };
+
+      const io = createConfigIO({
+        env: {} as NodeJS.ProcessEnv,
+        homedir: () => home,
+        logger,
+      });
+
+      io.loadConfig();
+      io.loadConfig();
+
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining("Config was last written by a newer OpenClaw"),
+      );
+    });
+  });
 });

@@ -1238,18 +1238,29 @@ function stampConfigVersion(cfg: OpenClawConfig): OpenClawConfig {
   };
 }
 
-function warnIfConfigFromFuture(cfg: OpenClawConfig, logger: Pick<typeof console, "warn">): void {
+/** One line per process: config reloads (short TTL cache) must not flood the TUI / stderr. */
+let hasWarnedConfigWrittenByNewerOpenClaw = false;
+
+function warnIfConfigFromFuture(
+  _configPath: string,
+  cfg: OpenClawConfig,
+  logger: Pick<typeof console, "warn">,
+): void {
   const touched = cfg.meta?.lastTouchedVersion;
   if (!touched) {
     return;
   }
-  if (shouldWarnOnTouchedVersion(VERSION, touched)) {
-    logger.warn(
-      `Config was last written by a newer OpenClaw (${touched}); current version is ${VERSION}.`,
-    );
+  if (!shouldWarnOnTouchedVersion(VERSION, touched)) {
+    return;
   }
+  if (hasWarnedConfigWrittenByNewerOpenClaw) {
+    return;
+  }
+  hasWarnedConfigWrittenByNewerOpenClaw = true;
+  logger.warn(
+    `Config was last written by a newer OpenClaw (${touched}); current version is ${VERSION}.`,
+  );
 }
-
 function resolveConfigPathForDeps(deps: Required<ConfigIoDeps>): string {
   if (deps.configPath) {
     return deps.configPath;
@@ -1475,7 +1486,7 @@ export function createConfigIO(overrides: ConfigIoDeps = {}) {
           .join("\n");
         deps.logger.warn(`Config warnings:\\n${details}`);
       }
-      warnIfConfigFromFuture(validated.config, deps.logger);
+      warnIfConfigFromFuture(configPath, validated.config, deps.logger);
       const cfg = applyTalkConfigNormalization(
         applyModelDefaults(
           applyCompactionDefaults(
@@ -1690,7 +1701,7 @@ export function createConfigIO(overrides: ConfigIoDeps = {}) {
         });
       }
 
-      warnIfConfigFromFuture(validated.config, deps.logger);
+      warnIfConfigFromFuture(configPath, validated.config, deps.logger);
       const snapshotConfig = normalizeConfigPaths(
         applyTalkApiKey(
           applyTalkConfigNormalization(

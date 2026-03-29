@@ -73,6 +73,7 @@ describe("handleAgentEnd", () => {
       data: {
         phase: "error",
         error: "LLM request failed: connection refused by the provider endpoint.",
+        failoverReason: null,
       },
     });
   });
@@ -152,6 +153,7 @@ describe("handleAgentEnd", () => {
       data: {
         phase: "error",
         error: "x-api-key: ***",
+        failoverReason: null,
       },
     });
   });

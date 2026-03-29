@@ -145,12 +145,12 @@ describe("resolveGatewayConnection", () => {
       allowInsecureLocalOperatorUi: false,
     });
   });
-  it("uses config auth token for local mode when both config and env tokens are set", async () => {
+  it("prefers OPENCLAW_GATEWAY_TOKEN over gateway.auth.token when both are set (env-first)", async () => {
     loadConfig.mockReturnValue({ gateway: { mode: "local", auth: { token: "config-token" } } });
 
     await withEnvAsync({ OPENCLAW_GATEWAY_TOKEN: "env-token" }, async () => {
       const result = await resolveGatewayConnection({});
-      expect(result.token).toBe("config-token");
+      expect(result.token).toBe("env-token");
     });
   });
 

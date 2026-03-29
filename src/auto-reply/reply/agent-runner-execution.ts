@@ -88,17 +88,21 @@ function buildRateLimitCooldownMessage(err: unknown): string {
   if (!isFallbackSummaryError(err)) {
     return "⚠️ All models are temporarily rate-limited. Please try again in a few minutes.";
   }
+  const multiProviderHint =
+    new Set(err.attempts.map((a) => a.provider).filter(Boolean)).size > 1
+      ? " Your model fallbacks tried each provider in order (one request can hit several APIs)."
+      : "";
   const expiry = err.soonestCooldownExpiry;
   const now = Date.now();
   if (typeof expiry === "number" && expiry > now) {
     const secsLeft = Math.max(1, Math.ceil((expiry - now) / 1000));
     if (secsLeft <= 60) {
-      return `⚠️ Rate-limited — ready in ~${secsLeft}s. Please wait a moment.`;
+      return `⚠️ Rate-limited — ready in ~${secsLeft}s. Please wait a moment.${multiProviderHint}`;
     }
     const minsLeft = Math.ceil(secsLeft / 60);
-    return `⚠️ Rate-limited — ready in ~${minsLeft} min. Please try again shortly.`;
+    return `⚠️ Rate-limited — ready in ~${minsLeft} min. Please try again shortly.${multiProviderHint}`;
   }
-  return "⚠️ All models are temporarily rate-limited. Please try again in a few minutes.";
+  return `⚠️ All models are temporarily rate-limited. Please try again in a few minutes.${multiProviderHint}`;
 }
 
 function isPureTransientRateLimitSummary(err: unknown): boolean {

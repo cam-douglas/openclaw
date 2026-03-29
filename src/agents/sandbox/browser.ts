@@ -16,8 +16,10 @@ import { resolveSandboxBrowserDockerCreateConfig } from "./config.js";
 import { DEFAULT_SANDBOX_BROWSER_IMAGE, SANDBOX_BROWSER_SECURITY_HASH_EPOCH } from "./constants.js";
 import {
   buildSandboxCreateArgs,
+  createDockerDaemonUnavailableError,
   dockerContainerState,
   execDocker,
+  isDockerDaemonUnreachableMessage,
   readDockerContainerEnvVar,
   readDockerContainerLabel,
   readDockerPort,
@@ -104,6 +106,10 @@ async function ensureSandboxBrowserImage(image: string) {
   });
   if (result.code === 0) {
     return;
+  }
+  const stderr = result.stderr.trim();
+  if (isDockerDaemonUnreachableMessage(stderr)) {
+    throw createDockerDaemonUnavailableError(stderr);
   }
   throw new Error(
     `Sandbox browser image not found: ${image}. Build it with scripts/sandbox-browser-setup.sh.`,

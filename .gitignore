@@ -1,6 +1,9 @@
 node_modules
 **/node_modules/
+# Local secrets (API keys, droplet IP, SSH). Copy from `.env.example`.
 .env
+# Droplet pinned SSH host keys (see scripts/droplet-record-host-key.sh).
+.droplet/
 docker-compose.override.yml
 docker-compose.extra.yml
 dist

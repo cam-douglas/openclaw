@@ -66,6 +66,7 @@ import { runContextEngineMaintenance } from "./context-engine-maintenance.js";
 import { resolveGlobalLane, resolveSessionLane } from "./lanes.js";
 import { log } from "./logger.js";
 import { resolveModelAsync } from "./model.js";
+import { observeProviderRateLimitError, observeRateLimitUsage } from "./rate-limit-observer.js";
 import { runEmbeddedAttempt } from "./run/attempt.js";
 import { createEmbeddedRunAuthController } from "./run/auth-controller.js";
 import { createFailoverDecisionLogger } from "./run/failover-observation.js";
@@ -573,6 +574,12 @@ export async function runEmbeddedPiAgent(
             provider,
             model: modelId,
           });
+          observeRateLimitUsage({
+            provider: activeErrorContext.provider,
+            model: activeErrorContext.model,
+            runId: params.runId,
+            inputTokens: attemptUsage?.input ?? lastAssistantUsage?.input,
+          });
           const formattedAssistantErrorText = lastAssistant
             ? formatAssistantErrorText(lastAssistant, {
                 cfg: params.config,
@@ -961,6 +968,12 @@ export async function runEmbeddedPiAgent(
               ? describeFailoverError(normalizedPromptFailover)
               : describeFailoverError(promptError);
             const errorText = promptErrorDetails.message || describeUnknownError(promptError);
+            observeProviderRateLimitError({
+              provider: activeErrorContext.provider,
+              model: activeErrorContext.model,
+              runId: params.runId,
+              rawError: errorText,
+            });
             if (await maybeRefreshRuntimeAuthForAuthError(errorText, runtimeAuthRetry)) {
               authRetryPending = true;
               continue;
@@ -1110,6 +1123,12 @@ export async function runEmbeddedPiAgent(
           const billingFailure = isBillingAssistantError(lastAssistant);
           const failoverFailure = isFailoverAssistantError(lastAssistant);
           const assistantFailoverReason = classifyFailoverReason(lastAssistant?.errorMessage ?? "");
+          observeProviderRateLimitError({
+            provider: activeErrorContext.provider,
+            model: activeErrorContext.model,
+            runId: params.runId,
+            rawError: lastAssistant?.errorMessage ?? "",
+          });
           const assistantProfileFailureReason =
             resolveAuthProfileFailureReason(assistantFailoverReason);
           const cloudCodeAssistFormatError = attempt.cloudCodeAssistFormatError;

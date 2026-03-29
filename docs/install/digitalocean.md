@@ -36,9 +36,18 @@ Run a persistent OpenClaw Gateway on a DigitalOcean Droplet.
   </Step>
 
   <Step title="Connect and install">
-    ```bash
-    ssh root@YOUR_DROPLET_IP
+    On your **local machine**, require sudo before SSH, then connect:
 
+    ```bash
+    sudo -v
+    ssh root@YOUR_DROPLET_IP
+    ```
+
+    After you **exit** the SSH session, clear the local sudo cache: `sudo -k`.
+
+    On the **droplet** (remote shell), run:
+
+    ```bash
     apt update && apt upgrade -y
 
     # Install Node.js 24
@@ -84,9 +93,12 @@ Run a persistent OpenClaw Gateway on a DigitalOcean Droplet.
 
     **Option A: SSH tunnel (simplest)**
 
+    From a repo checkout, use `./scripts/droplet-tunnel.sh` (sudo-gated). Otherwise:
+
     ```bash
-    # From your local machine
+    sudo -v
     ssh -L 18789:localhost:18789 root@YOUR_DROPLET_IP
+    sudo -k
     ```
 
     Then open `http://localhost:18789`.

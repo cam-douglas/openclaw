@@ -41,10 +41,20 @@ async function withDotEnvFixture(run: (fixture: DotEnvFixture) => Promise<void>)
   const base = await fs.mkdtemp(path.join(os.tmpdir(), "openclaw-dotenv-test-"));
   const cwdDir = path.join(base, "cwd");
   const stateDir = path.join(base, "state");
+  const prevHome = process.env.HOME;
+  process.env.HOME = base;
   process.env.OPENCLAW_STATE_DIR = stateDir;
   await fs.mkdir(cwdDir, { recursive: true });
   await fs.mkdir(stateDir, { recursive: true });
-  await run({ base, cwdDir, stateDir });
+  try {
+    await run({ base, cwdDir, stateDir });
+  } finally {
+    if (prevHome === undefined) {
+      delete process.env.HOME;
+    } else {
+      process.env.HOME = prevHome;
+    }
+  }
 }
 
 describe("loadDotEnv", () => {
@@ -264,6 +274,21 @@ describe("loadCliDotEnv", () => {
         expect(process.env.OPENCLAW_CONFIG_PATH).toBeUndefined();
         expect(process.env.NODE_OPTIONS).toBeUndefined();
         expect(process.env.ANTHROPIC_BASE_URL).toBeUndefined();
+      });
+    });
+  });
+
+  it("loads ~/openclaw/.env when present (so CLI works outside repo cwd)", async () => {
+    await withIsolatedEnvAndCwd(async () => {
+      await withDotEnvFixture(async ({ base, cwdDir }) => {
+        const checkoutEnv = path.join(base, "openclaw", ".env");
+        await writeEnvFile(checkoutEnv, "DROPLET_IP=203.0.113.50\n");
+        vi.spyOn(process, "cwd").mockReturnValue(cwdDir);
+        delete process.env.DROPLET_IP;
+
+        loadCliDotEnv({ quiet: true });
+
+        expect(process.env.DROPLET_IP).toBe("203.0.113.50");
       });
     });
   });

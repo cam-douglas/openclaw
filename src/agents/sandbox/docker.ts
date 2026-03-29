@@ -241,6 +241,32 @@ export async function readDockerPort(containerName: string, port: number) {
   return Number.isFinite(mapped) ? mapped : null;
 }
 
+/** Matches stderr when the Docker CLI cannot reach the daemon (Desktop stopped, socket missing, etc.). */
+const DOCKER_DAEMON_UNREACHABLE_MARKERS = [
+  "cannot connect to the docker daemon",
+  "is the docker daemon running",
+  "docker daemon is not running",
+  "connection refused",
+  "error during connect",
+] as const;
+
+export function isDockerDaemonUnreachableMessage(text: string): boolean {
+  const lower = text.toLowerCase();
+  return DOCKER_DAEMON_UNREACHABLE_MARKERS.some((m) => lower.includes(m));
+}
+
+export function createDockerDaemonUnavailableError(detail?: string): Error {
+  const lines = [
+    "Sandbox mode uses Docker, but the Docker daemon is not reachable. Start Docker Desktop (or your container runtime), wait until it is fully running, then retry. Or disable sandboxing: set `agents.defaults.sandbox.mode=off` (for example `openclaw config set agents.defaults.sandbox.mode off`).",
+  ];
+  if (detail?.trim()) {
+    lines.push(`Underlying error: ${detail.trim()}`);
+  }
+  return Object.assign(new Error(lines.join(" ")), {
+    code: "DOCKER_DAEMON_UNAVAILABLE" as const,
+  });
+}
+
 async function dockerImageExists(image: string) {
   const result = await execDocker(["image", "inspect", image], {
     allowFailure: true,
@@ -251,6 +277,9 @@ async function dockerImageExists(image: string) {
   const stderr = result.stderr.trim();
   if (stderr.includes("No such image")) {
     return false;
+  }
+  if (isDockerDaemonUnreachableMessage(stderr)) {
+    throw createDockerDaemonUnavailableError(stderr);
   }
   throw new Error(`Failed to inspect sandbox image: ${stderr}`);
 }

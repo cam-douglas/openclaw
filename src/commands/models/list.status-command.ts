@@ -18,6 +18,7 @@ import {
 import { resolveEnvApiKey } from "../../agents/model-auth.js";
 import {
   buildModelAliasIndex,
+  findNormalizedProviderValue,
   isCliProvider,
   normalizeProviderId,
   parseModelRef,
@@ -26,7 +27,7 @@ import {
   resolveModelRefFromString,
 } from "../../agents/model-selection.js";
 import { withProgressTotals } from "../../cli/progress.js";
-import { createConfigIO } from "../../config/config.js";
+import { createConfigIO, type OpenClawConfig } from "../../config/config.js";
 import {
   resolveAgentModelFallbackValues,
   resolveAgentModelPrimaryValue,
@@ -59,6 +60,38 @@ import {
   ensureFlagCompatibility,
   resolveKnownAgentId,
 } from "./shared.js";
+
+/** Typical direct API origins when not overridden in config (no OpenClaw proxy in the path). */
+const DEFAULT_PROVIDER_HTTP_ORIGINS: Record<string, string> = {
+  anthropic: "https://api.anthropic.com",
+  cerebras: "https://api.cerebras.ai",
+  groq: "https://api.groq.com",
+  mistral: "https://api.mistral.ai",
+  openai: "https://api.openai.com",
+  openrouter: "https://openrouter.ai",
+  synthetic: "https://api.synthetic.new",
+  xai: "https://api.x.ai",
+  zai: "https://api.z.ai",
+};
+
+function resolvePrimaryApiOriginForStatus(params: { provider: string; cfg: OpenClawConfig }): {
+  origin: string | null;
+} {
+  const providers = params.cfg.models?.providers;
+  const normalizedConfig =
+    providers?.[params.provider] ?? findNormalizedProviderValue(providers ?? {}, params.provider);
+  const baseUrl = normalizedConfig?.baseUrl;
+  if (typeof baseUrl === "string" && baseUrl.trim()) {
+    try {
+      return { origin: new URL(baseUrl).origin };
+    } catch {
+      return { origin: baseUrl };
+    }
+  }
+  const pid = normalizeProviderId(params.provider);
+  const def = DEFAULT_PROVIDER_HTTP_ORIGINS[pid];
+  return def ? { origin: def } : { origin: null };
+}
 
 export async function modelsStatusCommand(
   opts: {
@@ -94,6 +127,10 @@ export async function modelsStatusCommand(
         defaultProvider: DEFAULT_PROVIDER,
         defaultModel: DEFAULT_MODEL,
       });
+  const primaryApi = resolvePrimaryApiOriginForStatus({
+    provider: resolved.provider,
+    cfg,
+  });
 
   const rawDefaultsModel = resolveAgentModelPrimaryValue(cfg.agents?.defaults?.model) ?? "";
   const rawModel = agentModelPrimary ?? rawDefaultsModel;
@@ -101,6 +138,16 @@ export async function modelsStatusCommand(
   const defaultLabel = rawModel || resolvedLabel;
   const defaultsFallbacks = resolveAgentModelFallbackValues(cfg.agents?.defaults?.model);
   const fallbacks = agentFallbacksOverride ?? defaultsFallbacks;
+  const defaultModelFallbackDistinctProviders = (() => {
+    const s = new Set<string>();
+    for (const raw of [resolvedLabel, ...fallbacks.map(String)]) {
+      const parsed = parseModelRef(String(raw ?? ""), DEFAULT_PROVIDER);
+      if (parsed?.provider) {
+        s.add(parsed.provider);
+      }
+    }
+    return Array.from(s).toSorted((a, b) => a.localeCompare(b));
+  })();
   const imageModel = resolveAgentModelPrimaryValue(cfg.agents?.defaults?.imageModel) ?? "";
   const imageFallbacks = resolveAgentModelFallbackValues(cfg.agents?.defaults?.imageModel);
   const aliases = Object.entries(cfg.agents?.defaults?.models ?? {}).reduce<Record<string, string>>(
@@ -333,6 +380,8 @@ export async function modelsStatusCommand(
       agentDir,
       defaultModel: defaultLabel,
       resolvedDefault: resolvedLabel,
+      resolvedPrimaryApiOrigin: primaryApi.origin,
+      defaultModelFallbackDistinctProviders,
       fallbacks,
       imageModel: imageModel || null,
       imageFallbacks,
@@ -403,6 +452,17 @@ export async function modelsStatusCommand(
       ":",
     )} ${colorize(rich, theme.success, displayDefault)}`,
   );
+  const primaryApiLine = (() => {
+    if (primaryApi.origin) {
+      return colorize(rich, theme.success, primaryApi.origin);
+    }
+    return colorize(
+      rich,
+      theme.muted,
+      "unknown (set models.providers.<provider>.baseUrl to verify routing)",
+    );
+  })();
+  runtime.log(`${label("Primary API")}${colorize(rich, theme.muted, ":")} ${primaryApiLine}`);
   runtime.log(
     `${labelWithSource(
       `Fallbacks (${fallbacks.length || 0})`,
@@ -413,6 +473,15 @@ export async function modelsStatusCommand(
       fallbacks.length ? fallbacks.join(", ") : "-",
     )}`,
   );
+  if (defaultModelFallbackDistinctProviders.length > 1) {
+    runtime.log(
+      `${label("Fallback chain")}${colorize(rich, theme.muted, ":")} ${colorize(
+        rich,
+        theme.warn,
+        `${defaultModelFallbackDistinctProviders.length} distinct providers (${defaultModelFallbackDistinctProviders.join(", ")}). If the primary fails, each fallback is tried in order — one message can trigger several upstream calls.`,
+      )}`,
+    );
+  }
   runtime.log(
     `${labelWithSource("Image model", agentId ? "defaults" : undefined)}${colorize(
       rich,

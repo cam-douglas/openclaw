@@ -56,9 +56,125 @@ Use a clean base image (Ubuntu 24.04 LTS). Avoid third-party Marketplace 1-click
 
 ## 2) Connect via SSH
 
+From a **repo checkout** on your Mac, use the helper (it **always** runs `sudo -v` before `ssh`, then `sudo -k` when the session ends):
+
 ```bash
-ssh root@YOUR_DROPLET_IP
+./scripts/droplet-ssh.sh
 ```
+
+For a **one-off** connection without the helper, use the same pattern (do not skip `sudo -v`):
+
+```bash
+sudo -v
+ssh root@YOUR_DROPLET_IP
+sudo -k
+```
+
+### Local `.env` (optional, repo checkout on your Mac)
+
+The repo root is gitignored for `.env`. Copy `.env.example` to `.env` and set `DROPLET_IP`, SSH user, and any API keys you use locally. Use `./scripts/droplet-ssh.sh` or `./scripts/droplet-tunnel.sh` instead of raw `ssh` so access stays sudo-gated.
+
+Prefer **SSH keys** over storing a server password in `.env`.
+
+### `openclaw … droplet` (run CLI on the VPS)
+
+With `DROPLET_IP` (and optional `SSH_USER`) in your environment, you can append **`droplet`** to almost any CLI invocation to run it **on the droplet over SSH** (after local `sudo -v`, with `sudo -k` after):
+
+```bash
+openclaw status droplet
+openclaw doctor droplet
+openclaw onboard droplet
+openclaw tui droplet
+openclaw models status --probe droplet
+```
+
+Use a recent `openclaw` on your Mac and on the VPS so you get the quiet `bash --noprofile --norc` wrapper and config warning dedupe; older global installs still run a login shell over SSH and spam logs.
+
+This spawns `ssh <user>@<DROPLET_IP> 'env -i … /bin/bash --noprofile --norc -c …'` so the remote skips login/rc noise (for example broken Homebrew lines in `/root/.profile`) and does not inherit a noisy environment from sshd while the inner script still exports a sane `PATH` before `exec` (see `src/cli/droplet-remote.ts`). It also forwards **`OPENCLAW_GATEWAY_TOKEN`** and **`OPENCLAW_GATEWAY_PASSWORD`** from your local environment (for example `~/.openclaw/.env` after `loadCliDotEnv`) into that remote session so **`openclaw tui droplet`** can authenticate to the gateway on the VPS — otherwise the TUI may show HTTP 401 because non-login SSH does not load profile-based env and the gateway user unit may be the only place those vars exist server-side. A bare remote `openclaw` often fails with `command not found` when the CLI lives under nvm/fnm or `/usr/local/bin`. Set `OPENCLAW_REMOTE_BIN` to an absolute path if needed. Confirm the remote install with **`./scripts/verify-droplet-openclaw.sh`**. Not supported on Windows without OpenSSH/`ssh` in `PATH` (use WSL or scripts above).
+
+### Privileged changes and sudo cache
+
+For work that requires `sudo` on the droplet, avoid leaving a reusable sudo grace window in the shell. After privileged OpenClaw or system commands, run `sudo -k` to clear the cached credential, or use the helper from a repo checkout:
+
+```bash
+./scripts/sudo-revoke-after.sh -- openclaw gateway restart
+```
+
+To require a password on **every** `sudo` invocation (no 15-minute cache), install a sudoers drop-in with `visudo` (example; adjust user/group to match your setup):
+
+```text
+# In a sudoers drop-in (use visudo):
+Defaults timestamp_timeout=0
+```
+
+## Security model, limits, and mitigations
+
+This section maps **known limits** of the droplet workflow to **concrete mitigations** you can apply today.
+
+### The repo cannot block raw SSH
+
+**Limit:** Nothing in git can stop you (or a script) from running `ssh user@ip` directly. Helper scripts are **opt-in policy** on your Mac.
+
+**Mitigation:**
+
+- Prefer **`./scripts/droplet-ssh.sh`**, **`./scripts/droplet-tunnel.sh`**, **`./scripts/sync-droplet-secrets.sh`**, **`./scripts/verify-droplet-openclaw.sh`**, and **`./scripts/droplet-record-host-key.sh`** (pinned host keys) so access stays **sudo-gated** (`sudo -v` before SSH/SCP, `sudo -k` after).
+- If you use raw `ssh`/`scp`, still follow the same **sudo -v → connect → sudo -k** pattern from [Connect via SSH](#2-connect-via-ssh).
+
+### Local `sudo -v` is a friction gate, not server authentication
+
+**Limit:** Prompting for your Mac password before SSH does **not** verify the droplet identity or stop a malicious host on first connect.
+
+**Mitigation:**
+
+- Use **SSH keys** (disable password login on the server when keys work).
+- Rely on **host key verification** (`known_hosts`). Helpers use `StrictHostKeyChecking=accept-new` on first connect; confirm the fingerprint when prompted.
+- **Firewall the droplet** (for example UFW: allow SSH and only what you need).
+- **Harden `sshd`** (Ubuntu: `/etc/ssh/sshd_config.d/`): e.g. `PasswordAuthentication no` when using keys; keep the daemon updated via `apt`.
+
+### Secrets on disk and in the gateway process
+
+**Limit:** Files such as `/root/.config/openclaw/gateway-secrets.env` are still files on disk. Moving keys to env for systemd does not remove them from **process memory** while the gateway runs.
+
+**Mitigation:**
+
+- Use **`./scripts/sync-droplet-secrets.sh`** after changing provider keys so the droplet file layout and **`OPENCLAW_AUTH_STORE_READONLY=1`** (installed by that script) stay aligned with the intent: avoid persisting keys back under agent paths.
+- Never commit **`.env`**; rotate keys if leaked.
+- Understand the tradeoff: the gateway **must** hold credentials in memory to call APIs; the sync layout reduces duplicate **on-disk** copies next to agent workspaces.
+
+### Mac vs droplet configuration drift
+
+**Limit:** Your laptop checkout and the VPS can diverge (OpenClaw version, config, keys).
+
+**Mitigation:**
+
+- Run **`openclaw doctor`** on the Mac and **`openclaw doctor droplet`** (or SSH in and run `openclaw doctor`) after upgrades or odd behavior.
+- Re-run **`./scripts/sync-droplet-secrets.sh`** whenever local provider env changes should apply on the server.
+- Align versions when debugging: compare `openclaw --version` locally vs **`./scripts/verify-droplet-openclaw.sh`** on the droplet.
+
+### Remote CLI (`openclaw … droplet`) and the remote binary
+
+**Limit:** Trailing **`droplet`** runs whatever **`openclaw`** resolves to **on the server** (PATH and install method).
+
+**Mitigation:**
+
+- Run **`./scripts/verify-droplet-openclaw.sh`** to print `command -v` and **`openclaw --version`** on the droplet.
+- If the binary name or path differs, set **`OPENCLAW_REMOTE_BIN`** locally (same as for `openclaw … droplet`; see `src/cli/droplet-remote.ts`).
+
+### Further SSH hardening (optional)
+
+Helpers and **`openclaw … droplet`** share the same client defaults where possible:
+
+- **`IdentitiesOnly=yes`** — avoid sending every key in your agent to the server.
+- **Keepalives** — `ServerAliveInterval` / `ServerAliveCountMax` so dead tunnels or NATs fail faster.
+- **First connect** — default **`StrictHostKeyChecking=accept-new`** (OpenSSH stores the host key after prompt). For **stricter** verification, pin keys:
+
+1. Run **`./scripts/droplet-record-host-key.sh`** once (or after the droplet is recreated). This writes **`$REPO_ROOT/.droplet/known_hosts`** (gitignored).
+2. With that file present, scripts **auto-use** it via **`UserKnownHostsFile`** and **`GlobalKnownHostsFile=/dev/null`** so only those keys are trusted for this connection.
+3. Or set **`OPENCLAW_DROPLET_KNOWN_HOSTS`** to an explicit path, or **`OPENCLAW_DROPLET_SSH_STRICT=1`** to require a known host key in the default **`~/.ssh/known_hosts`** (no `accept-new`).
+
+**`droplet-tunnel.sh`** also sets **`ExitOnForwardFailure=yes`** so a bad forward fails immediately.
+
+Implementation: **`scripts/droplet-ssh-common.sh`**, **`src/cli/droplet-ssh-options.ts`**.
 
 ## 3) Install OpenClaw
 
@@ -103,18 +219,35 @@ systemctl --user status openclaw-gateway.service
 journalctl --user -u openclaw-gateway.service -f
 ```
 
+### Sync API keys from your Mac (repo checkout)
+
+If you keep provider keys in a **gitignored** repo-root `.env` (see `.env.example`), you can push them to the droplet **over SSH** (encrypted in transit) and restart the gateway user service. The script requires **local sudo** before SSH/SCP (same policy as `droplet-ssh.sh`):
+
+```bash
+./scripts/sync-droplet-secrets.sh
+```
+
+The script writes `/root/.config/openclaw/gateway-secrets.env` (mode `600`, directory mode `700`) for systemd—**outside** `~/.openclaw/agents/...` so provider secrets are not stored beside workspace/agent files. It **removes** env-backed API key entries from `auth-profiles.json` so providers resolve from the gateway environment only, sets `OPENCLAW_AUTH_STORE_READONLY=1` to avoid persisting keys back under the agent directory, installs a user-unit drop-in, and runs `systemctl --user restart openclaw-gateway.service`. Use `./scripts/sync-droplet-secrets.sh --dry-run` to preview sizes only.
+
+Prefer **SSH keys** over storing a password; never commit `.env`.
+
+Limits: the gateway process still receives keys in `process.env` (required for API calls). This layout prevents **on-disk** copies under typical agent paths; it does not sandbox the Node process memory from privileged code paths.
+
 ## 6) Access the Dashboard
 
 The gateway binds to loopback by default. To access the Control UI:
 
 **Option A: SSH Tunnel (recommended)**
 
-```bash
-# From your local machine
-ssh -L 18789:localhost:18789 root@YOUR_DROPLET_IP
+From a repo checkout (sudo-gated):
 
-# Then open: http://localhost:18789
+```bash
+./scripts/droplet-tunnel.sh
 ```
+
+Then open `http://localhost:18789`.
+
+Without the script, use `sudo -v`, then `ssh -L 18789:localhost:18789 root@YOUR_DROPLET_IP`, then `sudo -k` when done.
 
 **Option B: Tailscale Serve (HTTPS, loopback-only)**
 

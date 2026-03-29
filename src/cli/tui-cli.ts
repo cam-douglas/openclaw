@@ -5,6 +5,15 @@ import { theme } from "../terminal/theme.js";
 import { runTui } from "../tui/tui.js";
 import { parseTimeoutMs } from "./parse-timeout.js";
 
+export function normalizeTuiHistoryLimit(value: unknown): number | undefined {
+  const normalizedValue = typeof value === "string" || typeof value === "number" ? value : "200";
+  const parsed = Number.parseInt(`${normalizedValue}`, 10);
+  if (Number.isNaN(parsed)) {
+    return undefined;
+  }
+  return parsed < 1 ? 1 : parsed;
+}
+
 export function registerTuiCli(program: Command) {
   program
     .command("tui")
@@ -30,7 +39,7 @@ export function registerTuiCli(program: Command) {
             `warning: invalid --timeout-ms "${String(opts.timeoutMs)}"; ignoring`,
           );
         }
-        const historyLimit = Number.parseInt(String(opts.historyLimit ?? "200"), 10);
+        const historyLimit = normalizeTuiHistoryLimit(opts.historyLimit);
         await runTui({
           url: opts.url as string | undefined,
           token: opts.token as string | undefined,
@@ -40,7 +49,7 @@ export function registerTuiCli(program: Command) {
           thinking: opts.thinking as string | undefined,
           message: opts.message as string | undefined,
           timeoutMs,
-          historyLimit: Number.isNaN(historyLimit) ? undefined : historyLimit,
+          historyLimit,
         });
       } catch (err) {
         defaultRuntime.error(String(err));

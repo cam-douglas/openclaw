@@ -82,6 +82,7 @@ export function handleAgentEnd(ctx: EmbeddedPiSubscribeContext) {
       data: {
         phase: "error",
         error: safeErrorText,
+        failoverReason,
       },
     });
   } else {

@@ -17,6 +17,8 @@ import {
   isRootHelpInvocation,
 } from "./argv.js";
 import { maybeRunCliInContainer, parseCliContainerArgs } from "./container-target.js";
+import { loadCliDotEnv } from "./dotenv.js";
+import { tryHandleDropletRemoteCli } from "./droplet-remote.js";
 import { applyCliProfileEnv, parseCliProfileArgs } from "./profile.js";
 import { tryRouteCli } from "./route.js";
 import { normalizeWindowsArgv } from "./windows-argv.js";
@@ -122,10 +124,12 @@ export async function runCli(argv: string[] = process.argv) {
   let normalizedArgv = parsedProfile.argv;
 
   if (shouldLoadCliDotEnv()) {
-    const { loadCliDotEnv } = await import("./dotenv.js");
     loadCliDotEnv({ quiet: true });
   }
   normalizeEnv();
+  if (tryHandleDropletRemoteCli(normalizedArgv)) {
+    return;
+  }
   if (shouldEnsureCliPath(normalizedArgv)) {
     ensureOpenClawCliOnPath();
   }

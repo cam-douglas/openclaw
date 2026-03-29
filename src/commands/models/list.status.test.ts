@@ -210,6 +210,8 @@ describe("modelsStatusCommand auth overview", () => {
 
     expect(mocks.resolveOpenClawAgentDir).toHaveBeenCalled();
     expect(payload.defaultModel).toBe("anthropic/claude-opus-4-5");
+    expect(payload.resolvedPrimaryApiOrigin).toBe("https://api.anthropic.com");
+    expect(payload.defaultModelFallbackDistinctProviders).toEqual(["anthropic"]);
     expect(payload.configPath).toBe("/tmp/openclaw-dev/openclaw.json");
     expect(payload.auth.storePath).toBe("/tmp/openclaw-agent/auth-profiles.json");
     expect(payload.auth.shellEnvFallback.enabled).toBe(true);
