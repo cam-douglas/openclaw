@@ -45,7 +45,7 @@ TARGET="${SSH_USER}@${DROPLET_IP}"
 source "$ROOT/scripts/droplet-ssh-common.sh"
 droplet_ssh_build_opts || exit 1
 
-# Prompt for sudo only after local config validates (single gate; reuses timestamp via sudo -n).
+# Prompt for sudo only after local config validates (single `sudo -v`).
 # shellcheck source=scripts/droplet-sudo-gate.sh
 source "$ROOT/scripts/droplet-sudo-gate.sh"
 droplet_sudo_gate_refresh

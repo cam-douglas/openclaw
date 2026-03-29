@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Shared sudo gate for droplet helper scripts (local operator machine).
-# - Tries `sudo -n -v` first so an existing sudo timestamp does not prompt again.
-# - Falls back to interactive `sudo -v` when needed.
+# - Single `sudo -v` (refreshes timestamp when already cached; one prompt when not).
+#   Do not chain `sudo -n -v` before `sudo -v`: on some macOS/PAM setups that asks twice.
 # - OPENCLAW_DROPLET_SUDO_GATE=0 skips gate and revoke (CI/automation only).
 #
 # shellcheck shell=bash
@@ -16,9 +16,6 @@ droplet_sudo_revoke_now() {
 
 droplet_sudo_gate_refresh() {
   if [[ "${OPENCLAW_DROPLET_SUDO_GATE:-1}" == "0" ]]; then
-    return 0
-  fi
-  if sudo -n -v 2>/dev/null; then
     return 0
   fi
   sudo -v

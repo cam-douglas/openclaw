@@ -1,7 +1,7 @@
 /**
  * Trailing `droplet` runs the same OpenClaw CLI on the SSH host (see DROPLET_IP / SSH_USER).
- * Requires local sudo refresh before SSH and revoke after (matches repo SSH policy; tries
- * `sudo -n -v` first so a fresh timestamp does not prompt twice).
+ * Requires local sudo refresh before SSH and revoke after (matches repo SSH policy; single
+ * `sudo -v` so macOS/PAM does not double-prompt).
  * Limits and mitigations: docs/platforms/digitalocean.md → "Security model, limits, and mitigations".
  */
 import { spawnSync } from "node:child_process";
@@ -17,10 +17,6 @@ import { buildDropletSshClientOptions } from "./droplet-ssh-options.js";
 /** Refresh sudo timestamp for droplet helpers; skip with OPENCLAW_DROPLET_SUDO_GATE=0. */
 export function refreshDropletLocalSudoGate(): void {
   if (process.env.OPENCLAW_DROPLET_SUDO_GATE?.trim() === "0") {
-    return;
-  }
-  const cached = spawnSync("sudo", ["-n", "-v"], { stdio: "ignore" });
-  if (cached.status === 0) {
     return;
   }
   const sudoV = spawnSync("sudo", ["-v"], { stdio: "inherit" });

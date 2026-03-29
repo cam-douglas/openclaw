@@ -6,7 +6,7 @@ Docs: https://docs.openclaw.ai
 
 ### Changes
 
-- Droplet helpers: share a single sudo gate that tries `sudo -n -v` first (reuse an existing timestamp), run the sync script gate only after local env/SSH options validate, and allow `OPENCLAW_DROPLET_SUDO_GATE=0` for automation; `openclaw … droplet` matches the same behavior.
+- Droplet helpers: share a single sudo gate with **one** `sudo -v` (removed `sudo -n -v` prefix that could double-prompt on macOS), run the sync script gate only after local env/SSH options validate, and allow `OPENCLAW_DROPLET_SUDO_GATE=0` for automation; `openclaw … droplet` matches.
 - LINE/outbound media: add LINE image, video, and audio outbound sends on the LINE-specific delivery path, including explicit preview/tracking handling for videos while keeping generic media sends on the existing image-only route. (#45826) Thanks @masatohoshino.
 
 ### Fixes

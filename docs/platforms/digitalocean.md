@@ -56,7 +56,7 @@ Use a clean base image (Ubuntu 24.04 LTS). Avoid third-party Marketplace 1-click
 
 ## 2) Connect via SSH
 
-From a **repo checkout** on your Mac, use the helper (it **always** runs the sudo gate before `ssh`, then `sudo -k` when the session ends; tries `sudo -n -v` first):
+From a **repo checkout** on your Mac, use the helper (it **always** runs **`sudo -v`** once before `ssh`, then `sudo -k` when the session ends):
 
 ```bash
 ./scripts/droplet-ssh.sh
@@ -128,7 +128,7 @@ This section maps **known limits** of the droplet workflow to **concrete mitigat
 
 **Mitigation:**
 
-- Prefer **`./scripts/droplet-ssh.sh`**, **`./scripts/droplet-tunnel.sh`**, **`./scripts/sync-droplet-secrets.sh`**, **`./scripts/verify-droplet-openclaw.sh`**, and **`./scripts/droplet-record-host-key.sh`** (pinned host keys) so access stays **sudo-gated** (`sudo -n`/`sudo -v` before SSH/SCP, `sudo -k` after).
+- Prefer **`./scripts/droplet-ssh.sh`**, **`./scripts/droplet-tunnel.sh`**, **`./scripts/sync-droplet-secrets.sh`**, **`./scripts/verify-droplet-openclaw.sh`**, and **`./scripts/droplet-record-host-key.sh`** (pinned host keys) so access stays **sudo-gated** (`sudo -v` before SSH/SCP, `sudo -k` after).
 - If you use raw `ssh`/`scp`, still follow the same **sudo gate → connect → sudo -k** pattern from [Connect via SSH](#2-connect-via-ssh).
 
 ### Local `sudo -v` is a friction gate, not server authentication
@@ -144,7 +144,9 @@ This section maps **known limits** of the droplet workflow to **concrete mitigat
 
 ### One Mac password prompt per droplet helper
 
-Helpers share **`scripts/droplet-sudo-gate.sh`**: they run **`sudo -n -v`** first so if you already entered your password recently (same terminal, within the sudo timestamp window), you should **not** get a second prompt. Trailing **`openclaw … droplet`** does the same before SSH. **`sync-droplet-secrets.sh`** runs the sudo gate **after** your `.env` loads and SSH client options are valid so a bad config exits before any prompt. For trusted automation only, set **`OPENCLAW_DROPLET_SUDO_GATE=0`** to skip the gate and the exit **`sudo -k`**.
+Helpers share **`scripts/droplet-sudo-gate.sh`**: they run **`sudo -v` once** (refreshes the sudo timestamp; when a credential is already cached, this usually does **not** prompt). Trailing **`openclaw … droplet`** does the same before SSH. **`sync-droplet-secrets.sh`** runs the sudo gate **after** your `.env` loads and SSH client options are valid so a bad config exits before any prompt. For trusted automation only, set **`OPENCLAW_DROPLET_SUDO_GATE=0`** to skip the gate and the exit **`sudo -k`**.
+
+If your **`sudoers`** uses **`timestamp_timeout=0`**, every **`sudo`** will prompt; that is separate from OpenClaw. A prior **`sudo -n` + `sudo -v` chain was removed** because some macOS/PAM setups prompted twice.
 
 ### Secrets on disk and in the gateway process
 
@@ -278,7 +280,7 @@ From a repo checkout (sudo-gated):
 
 Then open `http://localhost:18789`.
 
-Without the script, use `sudo -n -v` or `sudo -v`, then `ssh -L 18789:localhost:18789 root@YOUR_DROPLET_IP`, then `sudo -k` when done.
+Without the script, use `sudo -v`, then `ssh -L 18789:localhost:18789 root@YOUR_DROPLET_IP`, then `sudo -k` when done.
 
 **Option B: Tailscale Serve (HTTPS, loopback-only)**
 
