@@ -40,6 +40,8 @@ def main() -> None:
         ("XAI_API_KEY", opt("GROK_API_KEY_DROPLET")),
         ("GEMINI_API_KEY", opt("GEMINI_API_KEY_DROPLET")),
         ("HF_TOKEN", opt("HUGGINGFACE_API_KEY_DROPLET")),
+        ("KIMI_API_KEY", opt("KIMI_API_KEY_DROPLET") or opt("KIMI_API_KEY")),
+        ("MOONSHOT_API_KEY", opt("MOONSHOT_API_KEY_DROPLET") or opt("MOONSHOT_API_KEY")),
         ("BASE_RPC_URL", opt("BASE_RPC_URL")),
         ("BINANCE_API_KEY", opt("BINANCE_API_KEY")),
         ("BINANCE_API_SECRET", opt("BINANCE_API_SECRET")),

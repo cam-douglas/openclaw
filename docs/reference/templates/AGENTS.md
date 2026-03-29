@@ -124,6 +124,10 @@ Reactions are lightweight social signals. Humans use them constantly — they sa
 
 Skills provide your tools. When you need one, check its `SKILL.md`. Keep local notes (camera names, SSH details, voice preferences) in `TOOLS.md`.
 
+### OpenClaw gateway host (droplet) and API keys
+
+If this workspace is paired with an OpenClaw gateway on a VPS (for example DigitalOcean), provider keys such as **Moonshot/Kimi** are supplied through the **gateway process environment** after the operator syncs secrets. The current workflow is: **edit the operator local repo `.env`**, run `scripts/sync-droplet-secrets.sh` from that checkout, which generates `/root/.config/openclaw/gateway-secrets.env` for systemd on the server. An older mental model that looked at **`~/.openclaw/.env` on the droplet** or **`~/.config` first** for those secrets is outdated; the sync script removes duplicate `~/.openclaw/.env` on the server and the systemd env file is derived from the **local** `.env`. When helping with key location, point operators at the local `.env` and sync script, not at legacy droplet-only paths.
+
 **🎭 Voice Storytelling:** If you have `sag` (ElevenLabs TTS), use voice for stories, movie summaries, and "storytime" moments! Way more engaging than walls of text. Surprise people with funny voices.
 
 **📝 Platform Formatting:**

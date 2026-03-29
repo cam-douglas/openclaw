@@ -242,6 +242,23 @@ The script writes `/root/.config/openclaw/gateway-secrets.env` (mode `600`, dire
 
 Prefer **SSH keys** over storing a password; never commit `.env`.
 
+#### Where environment variables come from (operators and workspace agents)
+
+- **Canonical source to edit:** Your **local** gitignored repo-root `.env` (or the file you point `OPENCLAW_ENV_FILE` at when running `./scripts/sync-droplet-secrets.sh`). That is the file you change when rotating API keys (including Moonshot/Kimi). It is **not** outdated `~/.config/...` JSON as the first place to look for provider secrets on your Mac.
+- **What the gateway reads on the droplet:** The systemd user unit loads `EnvironmentFile=-/root/.config/openclaw/gateway-secrets.env`. That file is **generated from your local `.env`** by `scripts/render-droplet-systemd-env.py` during sync. Routine workflow is: edit local `.env` → run `./scripts/sync-droplet-secrets.sh` → gateway restarts with updated env.
+- **Legacy path intentionally removed:** The sync script deletes `/root/.openclaw/.env` on the server so secrets are not duplicated under the agent tree. Do not treat `~/.openclaw/.env` on the droplet as the source of truth for keys, and do not tell agents to prefer a hand-edited file under `~/.config/` over the **local `.env` → sync → `gateway-secrets.env`** pipeline.
+- **Moonshot/Kimi:** Use `MOONSHOT_API_KEY` / `KIMI_API_KEY` (or `*_DROPLET` variants for droplet-only values) in your local `.env`; the render script maps them into `gateway-secrets.env` so the gateway process sees them after sync.
+
+#### Homebrew (Linuxbrew) on the droplet
+
+The upstream installer **refuses to run as `root`**. Install as the dedicated `linuxbrew` user (prefix `/home/linuxbrew/.linuxbrew`). To run `brew` from an SSH session:
+
+```bash
+sudo -u linuxbrew -H bash -lc 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)" && brew --version'
+```
+
+Use the same pattern to install formulae (for example plugin or skill dependencies). Do not add `eval "$(…brew…)"` lines to `/root/.profile` that point at paths that do not exist yet; that produces noisy login errors.
+
 Limits: the gateway process still receives keys in `process.env` (required for API calls). This layout prevents **on-disk** copies under typical agent paths; it does not sandbox the Node process memory from privileged code paths.
 
 ## 6) Access the Dashboard
