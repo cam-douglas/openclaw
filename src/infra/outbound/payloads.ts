@@ -5,6 +5,10 @@ import {
   isRenderablePayload,
   shouldSuppressReasoningPayload,
 } from "../../auto-reply/reply/reply-payloads.js";
+import {
+  SILENT_REPLY_TOKEN,
+  stripSilentReplyStreamingPrefixForDisplay,
+} from "../../auto-reply/tokens.js";
 import type { ReplyPayload } from "../../auto-reply/types.js";
 import {
   hasInteractiveReplyBlocks,
@@ -61,6 +65,10 @@ export function normalizeReplyPayloadsForDelivery(
       continue;
     }
     const parsed = parseReplyDirectives(payload.text ?? "");
+    const strippedText = stripSilentReplyStreamingPrefixForDisplay(
+      parsed.text ?? "",
+      SILENT_REPLY_TOKEN,
+    );
     const explicitMediaUrls = payload.mediaUrls ?? parsed.mediaUrls;
     const explicitMediaUrl = payload.mediaUrl ?? parsed.mediaUrl;
     const mergedMedia = mergeMediaUrls(
@@ -74,7 +82,7 @@ export function normalizeReplyPayloadsForDelivery(
       text:
         formatBtwTextForExternalDelivery({
           ...payload,
-          text: parsed.text ?? "",
+          text: strippedText,
         }) ?? "",
       mediaUrls: mergedMedia.length ? mergedMedia : undefined,
       mediaUrl: resolvedMediaUrl,

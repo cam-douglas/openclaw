@@ -148,6 +148,15 @@ export function stripSilentReplyStreamingPrefixForDisplay(
   }
   const lead = m[1];
   if (lead === tokenUpper) {
+    const afterLead = trimmedStart.slice(lead.length);
+    // Leaked stream: full token then paragraph break + real content ("NO_REPLY\n\nHello").
+    // Do not strip "NO_REPLY -- note" (leading substantive text per #30916 tests).
+    if (/^\s*\n/.test(afterLead)) {
+      const rest = afterLead.replace(/^\s+/, "");
+      if (rest.length > 0) {
+        return (text.slice(0, wsBefore) + rest).trimStart();
+      }
+    }
     return text;
   }
   if (!tokenUpper.startsWith(lead)) {

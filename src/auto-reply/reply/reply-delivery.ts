@@ -1,6 +1,6 @@
 import { resolveSendableOutboundReplyParts } from "openclaw/plugin-sdk/reply-payload";
 import { logVerbose } from "../../globals.js";
-import { SILENT_REPLY_TOKEN } from "../tokens.js";
+import { SILENT_REPLY_TOKEN, stripSilentReplyStreamingPrefixForDisplay } from "../tokens.js";
 import type { BlockReplyContext, ReplyPayload } from "../types.js";
 import type { BlockReplyPipeline } from "./block-reply-pipeline.js";
 import { createBlockReplyContentKey } from "./block-reply-pipeline.js";
@@ -36,6 +36,9 @@ export function normalizeReplyPayloadDirectives(params: {
     : undefined;
 
   let text = parsed ? parsed.text || undefined : params.payload.text || undefined;
+  if (text) {
+    text = stripSilentReplyStreamingPrefixForDisplay(text, silentToken);
+  }
   if (params.trimLeadingWhitespace && text) {
     text = text.trimStart() || undefined;
   }

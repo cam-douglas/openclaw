@@ -6,6 +6,7 @@ import {
   isSilentReplyPayloadText,
   isSilentReplyText,
   SILENT_REPLY_TOKEN,
+  stripSilentReplyStreamingPrefixForDisplay,
   stripSilentToken,
 } from "../tokens.js";
 import type { ReplyPayload } from "../types.js";
@@ -59,6 +60,9 @@ export function normalizeReplyPayload(
       return null;
     }
     text = "";
+  }
+  if (text) {
+    text = stripSilentReplyStreamingPrefixForDisplay(text, silentToken);
   }
   // Strip NO_REPLY from mixed-content messages (e.g. "😄 NO_REPLY") so the
   // token never leaks to end users.  If stripping leaves nothing, treat it as

@@ -101,6 +101,8 @@ describe("isSilentReplyPrefixText", () => {
     expect(stripSilentReplyStreamingPrefixForDisplay("  NO_\n\tReal answer")).toBe("Real answer");
     expect(stripSilentReplyStreamingPrefixForDisplay("NO")).toBe("");
     expect(stripSilentReplyStreamingPrefixForDisplay("NOTE: hi")).toBe("NOTE: hi");
+    expect(stripSilentReplyStreamingPrefixForDisplay("NO_REPLY\n\nHello")).toBe("Hello");
+    expect(stripSilentReplyStreamingPrefixForDisplay("NO_REPLY -- nope")).toBe("NO_REPLY -- nope");
   });
 
   it("keeps underscore guard for non-NO_REPLY tokens", () => {

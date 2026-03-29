@@ -131,6 +131,12 @@ describe("normalizeReplyPayload", () => {
     expect(result!.text).toBe("NO_REPLY -- nope");
   });
 
+  it("strips leaked NO_REPLY paragraph before real content (root outbound sanitize)", () => {
+    const result = normalizeReplyPayload({ text: "NO_REPLY\n\nHere is the answer." });
+    expect(result).not.toBeNull();
+    expect(result!.text).toBe("Here is the answer.");
+  });
+
   it("suppresses message when stripping NO_REPLY leaves nothing", () => {
     const reasons: string[] = [];
     const result = normalizeReplyPayload(
