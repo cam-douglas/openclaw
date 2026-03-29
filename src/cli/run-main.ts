@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -88,6 +89,36 @@ export function shouldUseRootHelpFastPath(argv: string[]): boolean {
   return isRootHelpInvocation(argv);
 }
 
+function isTruthyFlag(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
+
+export function shouldRequireLocalSudoAuth(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+  stdinIsTTY: boolean | undefined = process.stdin.isTTY,
+  stdoutIsTTY: boolean | undefined = process.stdout.isTTY,
+): boolean {
+  if (platform !== "darwin") {
+    return false;
+  }
+  if (!stdinIsTTY || !stdoutIsTTY) {
+    return false;
+  }
+  return isTruthyFlag(env.OPENCLAW_REQUIRE_LOCAL_SUDO);
+}
+
+export function enforceLocalSudoAuthOnceForInvocation(): void {
+  execFileSync("sudo", ["-v"], { stdio: "inherit" });
+  try {
+    // Invalidate sudo timestamp immediately so each new invocation re-prompts.
+    execFileSync("sudo", ["-k"], { stdio: "ignore" });
+  } catch {
+    // Best effort: auth prompt succeeded, continue even if revoke fails.
+  }
+}
+
 function shouldLoadCliDotEnv(env: NodeJS.ProcessEnv = process.env): boolean {
   if (existsSync(path.join(process.cwd(), ".env"))) {
     return true;
@@ -127,6 +158,9 @@ export async function runCli(argv: string[] = process.argv) {
     loadCliDotEnv({ quiet: true });
   }
   normalizeEnv();
+  if (shouldRequireLocalSudoAuth()) {
+    enforceLocalSudoAuthOnceForInvocation();
+  }
   if (tryHandleDropletRemoteCli(normalizedArgv)) {
     return;
   }

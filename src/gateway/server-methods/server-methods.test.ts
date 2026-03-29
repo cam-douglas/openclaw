@@ -433,6 +433,54 @@ describe("exec approval handlers", () => {
     });
   }
 
+  async function startExecApprovalBatch(params: {
+    handlers: ExecApprovalHandlers;
+    sessionKey: string;
+    respond: ReturnType<typeof vi.fn>;
+    context: { broadcast: (event: string, payload: unknown) => void };
+  }) {
+    return params.handlers["exec.approval.batch.start"]({
+      params: { sessionKey: params.sessionKey } as ExecApprovalResolveArgs["params"],
+      respond: params.respond as unknown as ExecApprovalResolveArgs["respond"],
+      context: toExecApprovalResolveContext(params.context),
+      client: null,
+      req: { id: "req-batch-start", type: "req", method: "exec.approval.batch.start" },
+      isWebchatConnect: execApprovalNoop,
+    });
+  }
+
+  async function reviewExecApprovalBatch(params: {
+    handlers: ExecApprovalHandlers;
+    sessionKey: string;
+    respond: ReturnType<typeof vi.fn>;
+    context: { broadcast: (event: string, payload: unknown) => void };
+  }) {
+    return params.handlers["exec.approval.batch.review"]({
+      params: { sessionKey: params.sessionKey } as ExecApprovalResolveArgs["params"],
+      respond: params.respond as unknown as ExecApprovalResolveArgs["respond"],
+      context: toExecApprovalResolveContext(params.context),
+      client: null,
+      req: { id: "req-batch-review", type: "req", method: "exec.approval.batch.review" },
+      isWebchatConnect: execApprovalNoop,
+    });
+  }
+
+  async function runExecApprovalBatch(params: {
+    handlers: ExecApprovalHandlers;
+    sessionKey: string;
+    respond: ReturnType<typeof vi.fn>;
+    context: { broadcast: (event: string, payload: unknown) => void };
+  }) {
+    return params.handlers["exec.approval.batch.run"]({
+      params: { sessionKey: params.sessionKey } as ExecApprovalResolveArgs["params"],
+      respond: params.respond as unknown as ExecApprovalResolveArgs["respond"],
+      context: toExecApprovalResolveContext(params.context),
+      client: null,
+      req: { id: "req-batch-run", type: "req", method: "exec.approval.batch.run" },
+      isWebchatConnect: execApprovalNoop,
+    });
+  }
+
   function createExecApprovalFixture() {
     const manager = new ExecApprovalManager();
     const handlers = createExecApprovalHandlers(manager);
@@ -925,6 +973,92 @@ describe("exec approval handlers", () => {
     expect(respondTwo).toHaveBeenCalledWith(
       true,
       expect.objectContaining({ id: "approval-two", decision: null }),
+      undefined,
+    );
+  });
+
+  it("queues approvals while batch mode is active and runs them in order", async () => {
+    const { handlers, broadcasts, respond, context } = createExecApprovalFixture();
+    const startRespond = vi.fn();
+    const reviewRespond = vi.fn();
+    const runRespond = vi.fn();
+
+    await startExecApprovalBatch({
+      handlers,
+      sessionKey: "agent:main:main",
+      respond: startRespond,
+      context,
+    });
+    expect(startRespond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        ok: true,
+        active: true,
+        sessionKey: "agent:main:main",
+      }),
+      undefined,
+    );
+
+    const requestPromise = requestExecApproval({
+      handlers,
+      respond,
+      context,
+      params: {
+        host: "gateway",
+        nodeId: undefined,
+        systemRunPlan: undefined,
+        sessionKey: "agent:main:main",
+        id: "batch-approval-1",
+        twoPhase: true,
+        timeoutMs: 60_000,
+      },
+    });
+    await drainApprovalRequestTicks();
+
+    expect(
+      broadcasts.some(
+        (entry) =>
+          entry.event === "exec.approval.requested" &&
+          ((entry.payload as { id?: string })?.id ?? "") === "batch-approval-1",
+      ),
+    ).toBe(false);
+
+    await reviewExecApprovalBatch({
+      handlers,
+      sessionKey: "agent:main:main",
+      respond: reviewRespond,
+      context,
+    });
+    expect(reviewRespond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        ok: true,
+        active: true,
+        queued: [expect.objectContaining({ id: "batch-approval-1", command: "echo ok" })],
+      }),
+      undefined,
+    );
+
+    await runExecApprovalBatch({
+      handlers,
+      sessionKey: "agent:main:main",
+      respond: runRespond,
+      context,
+    });
+    expect(runRespond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({
+        ok: true,
+        active: false,
+        resolvedCount: 1,
+      }),
+      undefined,
+    );
+
+    await requestPromise;
+    expect(respond).toHaveBeenCalledWith(
+      true,
+      expect.objectContaining({ id: "batch-approval-1", decision: "allow-once" }),
       undefined,
     );
   });

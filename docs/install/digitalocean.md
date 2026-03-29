@@ -126,6 +126,20 @@ Run a persistent OpenClaw Gateway on a DigitalOcean Droplet.
   </Step>
 </Steps>
 
+## Chat batch approvals
+
+When exec approvals are enabled, you can queue and resolve approvals in one batch from chat:
+
+```bash
+/approve-batch start
+/approve-batch review
+/approve-batch run
+# or /approve-batch deny
+```
+
+`/approve-batch` is session-scoped. Start it in the same chat session where approvals are being requested.
+`/approve <id> allow-always` is a different flow and is not the same as batch mode.
+
 ## Troubleshooting
 
 **Gateway will not start** -- Run `openclaw doctor --non-interactive` and check logs with `journalctl --user -u openclaw-gateway.service -n 50`.

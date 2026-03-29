@@ -89,8 +89,9 @@ function expectPendingApprovalText(
   expect(result.details.status).toBe("approval-pending");
   const details = result.details as { approvalId: string; approvalSlug: string };
   const pendingText = getResultText(result);
+  expect(pendingText).toContain("Reply in chat: yes/y = allow once, no/n = deny (default deny)");
   expect(pendingText).toContain(
-    `Reply with: /approve ${details.approvalSlug} allow-once|allow-always|deny`,
+    `Advanced: /approve ${details.approvalSlug} allow-once|allow-always|deny`,
   );
   expect(pendingText).toContain(`full ${details.approvalId}`);
   expect(pendingText).toContain(`Host: ${options.host}`);

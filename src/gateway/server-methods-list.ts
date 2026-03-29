@@ -29,6 +29,7 @@ const BASE_METHODS = [
   "exec.approval.request",
   "exec.approval.waitDecision",
   "exec.approval.resolve",
+  "exec.approval.peekSession",
   "plugin.approval.request",
   "plugin.approval.waitDecision",
   "plugin.approval.resolve",

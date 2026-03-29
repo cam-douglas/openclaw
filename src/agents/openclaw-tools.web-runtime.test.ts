@@ -17,6 +17,7 @@ const mockedModuleIds = [
   "./tools/nodes-tool.js",
   "./tools/pdf-tool.js",
   "./tools/session-status-tool.js",
+  "./tools/sessions-delete-tool.js",
   "./tools/sessions-history-tool.js",
   "./tools/sessions-list-tool.js",
   "./tools/sessions-send-tool.js",
@@ -80,6 +81,9 @@ vi.mock("./tools/pdf-tool.js", () => ({
 }));
 vi.mock("./tools/session-status-tool.js", () => ({
   createSessionStatusTool: mockToolFactory("session_status_stub"),
+}));
+vi.mock("./tools/sessions-delete-tool.js", () => ({
+  createSessionsDeleteTool: mockToolFactory("sessions_delete_stub"),
 }));
 vi.mock("./tools/sessions-history-tool.js", () => ({
   createSessionsHistoryTool: mockToolFactory("sessions_history_stub"),

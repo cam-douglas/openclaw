@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Bidirectional, non-destructive OpenClaw workspace sync between local and droplet.
+# Bidirectional, non-destructive OpenClaw workspace markdown mirror sync.
 # - Never deletes existing files.
 # - Never overwrites original filenames.
-# - Mirrors remote files into local with *_droplet suffix.
-# - Mirrors local files into remote with *_local suffix.
+# - Mirrors remote Markdown files into local with *_droplet suffix.
+# - Mirrors local Markdown files into remote with *_local suffix.
+# - Ignores all non-Markdown files.
 #
 # Usage:
 #   ./scripts/sync-openclaw-preserve-bidirectional.sh
@@ -100,6 +101,8 @@ for item in src.rglob("*"):
     rel = item.relative_to(src)
     if has_mirror_suffix(rel.name):
         continue
+    if rel.suffix.lower() != ".md":
+        continue
     base, ext = split_name(rel.name)
     mirrored_name = f"{base}_{suffix}{ext}"
     out = dst / rel.parent / mirrored_name
@@ -149,6 +152,8 @@ for item in src.rglob("*"):
         continue
     rel = item.relative_to(src)
     if has_mirror_suffix(rel.name):
+        continue
+    if rel.suffix.lower() != ".md":
         continue
     base, ext = split_name(rel.name)
     mirrored_name = f"{base}_{suffix}{ext}"

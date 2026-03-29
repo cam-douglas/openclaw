@@ -271,9 +271,7 @@ describe("buildAgentSystemPrompt", () => {
       toolNames: ["sessions_spawn", "subagents", "agents_list", "exec"],
     });
 
-    expect(prompt).toContain(
-      'For requests like "do this in codex/claude code/gemini", treat it as ACP harness intent',
-    );
+    expect(prompt).toContain('For requests like "do this in codex/claude code/cursor/gemini"');
     expect(prompt).toContain(
       'On Discord, default ACP harness requests to thread-bound persistent sessions (`thread: true`, `mode: "session"`)',
     );
@@ -292,9 +290,7 @@ describe("buildAgentSystemPrompt", () => {
       acpEnabled: false,
     });
 
-    expect(prompt).not.toContain(
-      'For requests like "do this in codex/claude code/gemini", treat it as ACP harness intent',
-    );
+    expect(prompt).not.toContain('For requests like "do this in codex/claude code/cursor/gemini"');
     expect(prompt).not.toContain('runtime="acp" requires `agentId`');
     expect(prompt).not.toContain("not ACP harness ids");
     expect(prompt).toContain("- sessions_spawn: Spawn an isolated sub-agent session");
@@ -312,9 +308,7 @@ describe("buildAgentSystemPrompt", () => {
 
     expect(prompt).not.toContain('runtime="acp" requires `agentId`');
     expect(prompt).not.toContain("ACP harness ids follow acp.allowedAgents");
-    expect(prompt).not.toContain(
-      'For requests like "do this in codex/claude code/gemini", treat it as ACP harness intent',
-    );
+    expect(prompt).not.toContain('For requests like "do this in codex/claude code/cursor/gemini"');
     expect(prompt).not.toContain(
       'do not call `message` with `action=thread-create`; use `sessions_spawn` (`runtime: "acp"`, `thread: true`) as the single thread creation path',
     );

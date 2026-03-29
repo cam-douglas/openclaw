@@ -363,6 +363,29 @@ Reply in chat:
 
 The `/approve` command handles both exec approvals and plugin approvals. If the ID does not match a pending exec approval, it automatically checks plugin approvals.
 
+### Batch approvals in chat
+
+For multi-step workflows, you can queue approvals and resolve them in one shot.
+
+Use:
+
+```
+/approve-batch start
+/approve-batch review
+/approve-batch run
+/approve-batch deny
+```
+
+Behavior:
+
+- `start` enables batch mode for the current session key.
+- While active, new exec approvals are queued instead of prompting one-by-one.
+- `review` lists queued approvals with full command text.
+- `run` approves the queued approvals in order and ends batch mode.
+- `deny` rejects the queued approvals and ends batch mode.
+
+`allow-always` remains available, but it is not the same as batch mode.
+
 ### Plugin approval forwarding
 
 Plugin approval forwarding uses the same delivery pipeline as exec approvals but has its own

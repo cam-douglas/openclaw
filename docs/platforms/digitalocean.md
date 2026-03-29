@@ -92,6 +92,17 @@ Use a recent `openclaw` on your Mac and on the VPS so you get the quiet `bash --
 
 This spawns `ssh <user>@<DROPLET_IP> 'env -i … /bin/bash --noprofile --norc -c …'` so the remote skips login/rc noise (for example broken Homebrew lines in `/root/.profile`) and does not inherit a noisy environment from sshd while the inner script still exports a sane `PATH` before `exec` (see `src/cli/droplet-remote.ts`). It also forwards **`OPENCLAW_GATEWAY_TOKEN`** and **`OPENCLAW_GATEWAY_PASSWORD`** from your local environment (for example `~/.openclaw/.env` after `loadCliDotEnv`) into that remote session so **`openclaw tui droplet`** can authenticate to the gateway on the VPS — otherwise the TUI may show HTTP 401 because non-login SSH does not load profile-based env and the gateway user unit may be the only place those vars exist server-side. A bare remote `openclaw` often fails with `command not found` when the CLI lives under nvm/fnm or `/usr/local/bin`. Set `OPENCLAW_REMOTE_BIN` to an absolute path if needed. Confirm the remote install with **`./scripts/verify-droplet-openclaw.sh`**. Not supported on Windows without OpenSSH/`ssh` in `PATH` (use WSL or scripts above).
 
+When chat exec approvals are enabled, use batch approvals for multi-step flows:
+
+```bash
+/approve-batch start
+/approve-batch review
+/approve-batch run
+# or /approve-batch deny
+```
+
+`/approve-batch` is different from `/approve <id> allow-always`.
+
 ### Privileged changes and sudo cache
 
 For work that requires `sudo` on the droplet, avoid leaving a reusable sudo grace window in the shell. After privileged OpenClaw or system commands, run `sudo -k` to clear the cached credential, or use the helper from a repo checkout:

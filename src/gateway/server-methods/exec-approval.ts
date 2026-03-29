@@ -27,6 +27,19 @@ export function createExecApprovalHandlers(
   manager: ExecApprovalManager,
   opts?: { forwarder?: ExecApprovalForwarder },
 ): GatewayRequestHandlers {
+  const parseBatchSessionKey = (
+    params: unknown,
+  ): { ok: true; sessionKey: string } | { ok: false; message: string } => {
+    if (!params || typeof params !== "object" || Array.isArray(params)) {
+      return { ok: false, message: "sessionKey is required" };
+    }
+    const sessionKey = (params as { sessionKey?: unknown }).sessionKey;
+    if (typeof sessionKey !== "string" || sessionKey.trim().length === 0) {
+      return { ok: false, message: "sessionKey is required" };
+    }
+    return { ok: true, sessionKey: sessionKey.trim() };
+  };
+
   return {
     "exec.approval.request": async ({ params, respond, context, client }) => {
       if (!validateExecApprovalRequestParams(params)) {
@@ -177,44 +190,49 @@ export function createExecApprovalHandlers(
         );
         return;
       }
-      context.broadcast(
-        "exec.approval.requested",
-        {
-          id: record.id,
-          request: record.request,
-          createdAtMs: record.createdAtMs,
-          expiresAtMs: record.expiresAtMs,
-        },
-        { dropIfSlow: true },
+      const batchActive = manager.isBatchActive(
+        typeof record.request.sessionKey === "string" ? record.request.sessionKey : null,
       );
-      const hasExecApprovalClients = context.hasExecApprovalClients?.(client?.connId) ?? false;
-      let forwarded = false;
-      if (opts?.forwarder) {
-        try {
-          forwarded = await opts.forwarder.handleRequested({
+      if (!batchActive) {
+        context.broadcast(
+          "exec.approval.requested",
+          {
             id: record.id,
             request: record.request,
             createdAtMs: record.createdAtMs,
             expiresAtMs: record.expiresAtMs,
-          });
-        } catch (err) {
-          context.logGateway?.error?.(`exec approvals: forward request failed: ${String(err)}`);
-        }
-      }
-
-      if (!hasExecApprovalClients && !forwarded) {
-        manager.expire(record.id, "no-approval-route");
-        respond(
-          true,
-          {
-            id: record.id,
-            decision: null,
-            createdAtMs: record.createdAtMs,
-            expiresAtMs: record.expiresAtMs,
           },
-          undefined,
+          { dropIfSlow: true },
         );
-        return;
+        const hasExecApprovalClients = context.hasExecApprovalClients?.(client?.connId) ?? false;
+        let forwarded = false;
+        if (opts?.forwarder) {
+          try {
+            forwarded = await opts.forwarder.handleRequested({
+              id: record.id,
+              request: record.request,
+              createdAtMs: record.createdAtMs,
+              expiresAtMs: record.expiresAtMs,
+            });
+          } catch (err) {
+            context.logGateway?.error?.(`exec approvals: forward request failed: ${String(err)}`);
+          }
+        }
+
+        if (!hasExecApprovalClients && !forwarded) {
+          manager.expire(record.id, "no-approval-route");
+          respond(
+            true,
+            {
+              id: record.id,
+              decision: null,
+              createdAtMs: record.createdAtMs,
+              expiresAtMs: record.expiresAtMs,
+            },
+            undefined,
+          );
+          return;
+        }
       }
 
       // Only send immediate "accepted" response when twoPhase is requested.
@@ -351,6 +369,198 @@ export function createExecApprovalHandlers(
           context.logGateway?.error?.(`exec approvals: forward resolve failed: ${String(err)}`);
         });
       respond(true, { ok: true }, undefined);
+    },
+    "exec.approval.peekSession": async ({ params, respond }) => {
+      const parsed = parseBatchSessionKey(params);
+      if (!parsed.ok) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, parsed.message));
+        return;
+      }
+      const pending = manager.getPendingForSession(parsed.sessionKey);
+      const latest = pending.length > 0 ? pending[pending.length - 1] : null;
+      if (!latest) {
+        respond(
+          true,
+          {
+            ok: true,
+            sessionKey: parsed.sessionKey,
+            pendingCount: 0,
+            latest: null,
+          },
+          undefined,
+        );
+        return;
+      }
+      respond(
+        true,
+        {
+          ok: true,
+          sessionKey: parsed.sessionKey,
+          pendingCount: pending.length,
+          latest: {
+            id: latest.id,
+            command: latest.request.command,
+            host: latest.request.host ?? null,
+            createdAtMs: latest.createdAtMs,
+            expiresAtMs: latest.expiresAtMs,
+          },
+        },
+        undefined,
+      );
+    },
+    "exec.approval.batch.start": async ({ params, respond }) => {
+      const parsed = parseBatchSessionKey(params);
+      if (!parsed.ok) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, parsed.message));
+        return;
+      }
+      const batch = manager.startBatch(parsed.sessionKey);
+      respond(
+        true,
+        {
+          ok: true,
+          active: batch.active,
+          sessionKey: batch.sessionKey,
+          queuedCount: batch.queued.length,
+        },
+        undefined,
+      );
+    },
+    "exec.approval.batch.review": async ({ params, respond }) => {
+      const parsed = parseBatchSessionKey(params);
+      if (!parsed.ok) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, parsed.message));
+        return;
+      }
+      const batch = manager.getBatchQueue(parsed.sessionKey);
+      const queued = batch.queued.map((record) => ({
+        id: record.id,
+        command: record.request.command,
+        commandPreview: record.request.commandPreview ?? null,
+        cwd: record.request.cwd ?? null,
+        host: record.request.host ?? null,
+        agentId: record.request.agentId ?? null,
+        createdAtMs: record.createdAtMs,
+        expiresAtMs: record.expiresAtMs,
+      }));
+      respond(
+        true,
+        {
+          ok: true,
+          active: batch.active,
+          sessionKey: batch.sessionKey,
+          queued,
+        },
+        undefined,
+      );
+    },
+    "exec.approval.batch.run": async ({ params, respond, client, context }) => {
+      const parsed = parseBatchSessionKey(params);
+      if (!parsed.ok) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, parsed.message));
+        return;
+      }
+      const batch = manager.getBatchQueue(parsed.sessionKey);
+      const resolvedBy =
+        client?.connect?.client?.displayName ?? client?.connect?.client?.id ?? null;
+      const resolved: Array<{ id: string; decision: ExecApprovalDecision }> = [];
+      for (const record of batch.queued) {
+        const ok = manager.resolve(record.id, "allow-once", resolvedBy);
+        if (!ok) {
+          continue;
+        }
+        resolved.push({ id: record.id, decision: "allow-once" });
+        context.broadcast(
+          "exec.approval.resolved",
+          {
+            id: record.id,
+            decision: "allow-once",
+            resolvedBy,
+            ts: Date.now(),
+            request: record.request,
+          },
+          { dropIfSlow: true },
+        );
+        void opts?.forwarder
+          ?.handleResolved({
+            id: record.id,
+            decision: "allow-once",
+            resolvedBy,
+            ts: Date.now(),
+            request: record.request,
+          })
+          .catch((err) => {
+            context.logGateway?.error?.(
+              `exec approvals: forward batch resolve failed: ${String(err)}`,
+            );
+          });
+      }
+      manager.endBatch(parsed.sessionKey);
+      respond(
+        true,
+        {
+          ok: true,
+          active: false,
+          sessionKey: parsed.sessionKey,
+          resolvedCount: resolved.length,
+          resolved,
+        },
+        undefined,
+      );
+    },
+    "exec.approval.batch.deny": async ({ params, respond, client, context }) => {
+      const parsed = parseBatchSessionKey(params);
+      if (!parsed.ok) {
+        respond(false, undefined, errorShape(ErrorCodes.INVALID_REQUEST, parsed.message));
+        return;
+      }
+      const batch = manager.getBatchQueue(parsed.sessionKey);
+      const resolvedBy =
+        client?.connect?.client?.displayName ?? client?.connect?.client?.id ?? null;
+      const resolved: Array<{ id: string; decision: ExecApprovalDecision }> = [];
+      for (const record of batch.queued) {
+        const ok = manager.resolve(record.id, "deny", resolvedBy);
+        if (!ok) {
+          continue;
+        }
+        resolved.push({ id: record.id, decision: "deny" });
+        context.broadcast(
+          "exec.approval.resolved",
+          {
+            id: record.id,
+            decision: "deny",
+            resolvedBy,
+            ts: Date.now(),
+            request: record.request,
+          },
+          { dropIfSlow: true },
+        );
+        void opts?.forwarder
+          ?.handleResolved({
+            id: record.id,
+            decision: "deny",
+            resolvedBy,
+            ts: Date.now(),
+            request: record.request,
+          })
+          .catch((err) => {
+            context.logGateway?.error?.(
+              `exec approvals: forward batch resolve failed: ${String(err)}`,
+            );
+          });
+      }
+      manager.endBatch(parsed.sessionKey);
+      respond(
+        true,
+        {
+          ok: true,
+          active: false,
+          sessionKey: parsed.sessionKey,
+          resolvedCount: resolved.length,
+          resolved,
+        },
+        undefined,
+      );
     },
   };
 }

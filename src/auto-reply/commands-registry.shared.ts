@@ -190,6 +190,14 @@ export function buildBuiltinChatCommands(): ChatCommandDefinition[] {
       category: "management",
     }),
     defineChatCommand({
+      key: "approve-batch",
+      description: "Start, review, run, or deny queued exec approvals.",
+      textAlias: "/approve-batch",
+      acceptsArgs: true,
+      scope: "text",
+      category: "management",
+    }),
+    defineChatCommand({
       key: "context",
       nativeName: "context",
       description: "Explain how context is built and used.",

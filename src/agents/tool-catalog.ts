@@ -146,6 +146,14 @@ const CORE_TOOL_DEFINITIONS: CoreToolDefinition[] = [
     includeInOpenClawGroup: true,
   },
   {
+    id: "sessions_delete",
+    label: "sessions_delete",
+    description: "Delete sessions",
+    sectionId: "sessions",
+    profiles: ["coding", "messaging"],
+    includeInOpenClawGroup: true,
+  },
+  {
     id: "sessions_send",
     label: "sessions_send",
     description: "Send to session",

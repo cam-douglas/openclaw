@@ -345,7 +345,8 @@ describe("exec approval forwarder", () => {
     expect(text).toContain("🔒 Exec approval required");
     expect(text).toContain("Command: `echo hello`");
     expect(text).toContain("Expires in: 5s");
-    expect(text).toContain("Reply with: /approve <id> allow-once|allow-always|deny");
+    expect(text).toContain("Reply in chat: yes/y = allow once, no/n = deny (default deny)");
+    expect(text).toContain("Advanced: /approve <id> allow-once|allow-always|deny");
   });
 
   it.each([

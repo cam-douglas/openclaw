@@ -1,6 +1,10 @@
 import { handleAcpCommand } from "./commands-acp.js";
 import { handleAllowlistCommand } from "./commands-allowlist.js";
-import { handleApproveCommand } from "./commands-approve.js";
+import {
+  handleApproveBatchCommand,
+  handleApproveCommand,
+  handleApproveQuickCommand,
+} from "./commands-approve.js";
 import { handleBashCommand } from "./commands-bash.js";
 import { handleBtwCommand } from "./commands-btw.js";
 import { handleCompactCommand } from "./commands-compact.js";
@@ -49,6 +53,8 @@ export function loadCommandHandlers(): CommandHandler[] {
     handleToolsCommand,
     handleStatusCommand,
     handleAllowlistCommand,
+    handleApproveQuickCommand,
+    handleApproveBatchCommand,
     handleApproveCommand,
     handleContextCommand,
     handleExportSessionCommand,

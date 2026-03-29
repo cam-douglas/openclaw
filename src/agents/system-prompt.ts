@@ -247,6 +247,7 @@ export function buildAgentSystemPrompt(params: {
       : "List OpenClaw agent ids allowed for sessions_spawn",
     sessions_list: "List other sessions (incl. sub-agents) with filters/last",
     sessions_history: "Fetch history for another session/sub-agent",
+    sessions_delete: "Delete a specific session, or delete all sessions except the current one",
     sessions_send: "Send a message to another session/sub-agent",
     sessions_spawn: acpSpawnRuntimeEnabled
       ? 'Spawn an isolated sub-agent or ACP coding session (runtime="acp" requires `agentId` unless `acp.defaultAgent` is configured; ACP harness ids follow acp.allowedAgents, not agents_list)'
@@ -280,6 +281,7 @@ export function buildAgentSystemPrompt(params: {
     "agents_list",
     "sessions_list",
     "sessions_history",
+    "sessions_delete",
     "sessions_send",
     "subagents",
     "session_status",
@@ -427,6 +429,7 @@ export function buildAgentSystemPrompt(params: {
           "- cron: manage cron jobs and wake events (use for reminders; when scheduling a reminder, write the systemEvent text as something that will read like a reminder when it fires, and mention that it is a reminder depending on the time gap between setting and firing; include recent context in reminder text if appropriate)",
           "- sessions_list: list sessions",
           "- sessions_history: fetch session history",
+          "- sessions_delete: delete one session or all except current",
           "- sessions_send: send to another session",
           "- subagents: list/steer/kill sub-agent runs",
           '- session_status: show usage/time/model state and answer "what model are we using?"',
@@ -450,7 +453,7 @@ export function buildAgentSystemPrompt(params: {
     "Keep narration brief and value-dense; avoid repeating obvious steps.",
     "Use plain human language for narration unless in a technical context.",
     "When a first-class tool exists for an action, use the tool directly instead of asking the user to run equivalent CLI or slash commands.",
-    "When exec returns approval-pending, include the concrete /approve command from tool output (with allow-once|allow-always|deny) and do not ask for a different or rotated code.",
+    "When exec returns approval-pending, ask for a chat reply of yes/y (allow once) or no/n (deny), with no/n as the default-safe path. Also include advanced /approve options (allow-once|allow-always|deny) without rotating ids/codes. Batch approvals are also available via /approve-batch start|review|run|deny when the user wants grouped approvals.",
     "Treat allow-once as single-command only: if another elevated command needs approval, request a fresh /approve and do not claim prior approval covered it.",
     "When approvals are required, preserve and show the full command/script exactly as provided (including chained operators like &&, ||, |, ;, or multiline shells) so the user can approve what will actually run.",
     "",

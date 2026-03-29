@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   rewriteUpdateFlagArgv,
+  shouldRequireLocalSudoAuth,
   shouldEnsureCliPath,
   shouldRegisterPrimarySubcommand,
   shouldSkipPluginCommandRegistration,
@@ -134,5 +135,33 @@ describe("shouldUseRootHelpFastPath", () => {
     expect(shouldUseRootHelpFastPath(["node", "openclaw", "--profile", "work", "-h"])).toBe(true);
     expect(shouldUseRootHelpFastPath(["node", "openclaw", "status", "--help"])).toBe(false);
     expect(shouldUseRootHelpFastPath(["node", "openclaw", "--help", "status"])).toBe(false);
+  });
+});
+
+describe("shouldRequireLocalSudoAuth", () => {
+  it("is disabled by default", () => {
+    expect(shouldRequireLocalSudoAuth({}, "darwin")).toBe(false);
+  });
+
+  it("requires explicit opt-in on darwin", () => {
+    expect(
+      shouldRequireLocalSudoAuth({ OPENCLAW_REQUIRE_LOCAL_SUDO: "1" }, "darwin", true, true),
+    ).toBe(true);
+    expect(
+      shouldRequireLocalSudoAuth({ OPENCLAW_REQUIRE_LOCAL_SUDO: "true" }, "darwin", true, true),
+    ).toBe(true);
+  });
+
+  it("does not enable sudo gating outside darwin", () => {
+    expect(shouldRequireLocalSudoAuth({ OPENCLAW_REQUIRE_LOCAL_SUDO: "1" }, "linux")).toBe(false);
+  });
+
+  it("does not enable sudo gating for non-interactive invocations", () => {
+    expect(
+      shouldRequireLocalSudoAuth({ OPENCLAW_REQUIRE_LOCAL_SUDO: "1" }, "darwin", false, true),
+    ).toBe(false);
+    expect(
+      shouldRequireLocalSudoAuth({ OPENCLAW_REQUIRE_LOCAL_SUDO: "1" }, "darwin", true, false),
+    ).toBe(false);
   });
 });

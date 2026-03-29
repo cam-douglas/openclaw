@@ -88,18 +88,22 @@ describe("exec approval reply helpers", () => {
       nowMs: 1000,
     });
 
-    expect(payload.channelData).toEqual({
-      execApproval: {
-        approvalId: "req-1",
-        approvalSlug: "slug-1",
-        allowedDecisions: ["allow-once", "allow-always", "deny"],
-      },
+    expect(getExecApprovalReplyMetadata(payload)).toEqual({
+      approvalId: "req-1",
+      approvalSlug: "slug-1",
+      allowedDecisions: ["allow-once", "allow-always", "deny"],
     });
     expect(payload.text).toContain("Heads up.");
-    expect(payload.text).toContain("```txt\n/approve slug-1 allow-once\n```");
+    expect(payload.text).toContain(
+      "Reply in chat with `yes`/`y` to allow once, or `no`/`n` to deny.",
+    );
+    expect(payload.text).toContain("Default is deny unless you explicitly reply yes.");
     expect(payload.text).toContain("```sh\necho ok\n```");
     expect(payload.text).toContain("Host: gateway\nNode: node-1\nCWD: /tmp/work\nExpires in: 2s");
     expect(payload.text).toContain("Full id: `req-1`");
+    expect(payload.text).toContain(
+      "```txt\n/approve slug-1 allow-always\n/approve slug-1 deny\n```",
+    );
   });
 
   it("uses a longer fence for commands containing triple backticks", () => {
@@ -111,7 +115,9 @@ describe("exec approval reply helpers", () => {
       host: "sandbox",
     });
 
-    expect(payload.text).toContain("```txt\n/approve req-cmd-2 allow-once\n```");
+    expect(payload.text).toContain(
+      "```txt\n/approve req-cmd-2 allow-always\n/approve req-cmd-2 deny\n```",
+    );
     expect(payload.text).toContain("````sh\necho ```danger```\n````");
     expect(payload.text).not.toContain("Expires in:");
   });

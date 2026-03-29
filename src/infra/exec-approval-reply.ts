@@ -86,8 +86,8 @@ export function buildExecApprovalPendingReplyPayload(
     lines.push(warningText);
   }
   lines.push("Approval required.");
-  lines.push("Run:");
-  lines.push(buildFence(`/approve ${approvalCommandId} allow-once`, "txt"));
+  lines.push("Reply in chat with `yes`/`y` to allow once, or `no`/`n` to deny.");
+  lines.push("Default is deny unless you explicitly reply yes.");
   lines.push("Pending command:");
   lines.push(buildFence(params.command, "sh"));
   lines.push("Other options:");

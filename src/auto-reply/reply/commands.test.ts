@@ -1013,6 +1013,187 @@ describe("/approve command", () => {
   });
 });
 
+describe("yes/no exec approval quick replies", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("maps yes to allow-once for latest pending approval in session", async () => {
+    const cfg = {
+      commands: { text: true },
+      channels: { whatsapp: { allowFrom: ["*"] } },
+    } as OpenClawConfig;
+    const params = buildParams("yes", cfg, { SenderId: "123" });
+    callGatewayMock
+      .mockResolvedValueOnce({
+        ok: true,
+        sessionKey: "agent:main:main",
+        pendingCount: 1,
+        latest: { id: "req-latest-1" },
+      })
+      .mockResolvedValueOnce({ ok: true });
+
+    const result = await handleCommands(params);
+    expect(result.shouldContinue).toBe(false);
+    expect(result.reply?.text).toContain("Approved latest exec request");
+    expect(callGatewayMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        method: "exec.approval.peekSession",
+        params: { sessionKey: "agent:main:main" },
+      }),
+    );
+    expect(callGatewayMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        method: "exec.approval.resolve",
+        params: { id: "req-latest-1", decision: "allow-once" },
+      }),
+    );
+  });
+
+  it("maps no to deny and ignores quick reply when no pending approval exists", async () => {
+    const cfg = {
+      commands: { text: true },
+      channels: { whatsapp: { allowFrom: ["*"] } },
+    } as OpenClawConfig;
+    const denyParams = buildParams("n", cfg, { SenderId: "123" });
+    callGatewayMock
+      .mockResolvedValueOnce({
+        ok: true,
+        sessionKey: "agent:main:main",
+        pendingCount: 2,
+        latest: { id: "req-latest-2" },
+      })
+      .mockResolvedValueOnce({ ok: true });
+
+    const denyResult = await handleCommands(denyParams);
+    expect(denyResult.shouldContinue).toBe(false);
+    expect(denyResult.reply?.text).toContain("Denied latest exec request");
+    expect(callGatewayMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        method: "exec.approval.resolve",
+        params: { id: "req-latest-2", decision: "deny" },
+      }),
+    );
+
+    callGatewayMock.mockReset();
+    callGatewayMock.mockResolvedValueOnce({
+      ok: true,
+      sessionKey: "agent:main:main",
+      pendingCount: 0,
+      latest: null,
+    });
+    const noPendingParams = buildParams("y", cfg, { SenderId: "123" });
+    const noPendingResult = await handleCommands(noPendingParams);
+    expect(noPendingResult.shouldContinue).toBe(true);
+    expect(noPendingResult.reply).toBeUndefined();
+    expect(callGatewayMock).toHaveBeenCalledTimes(1);
+    expect(callGatewayMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: "exec.approval.peekSession",
+      }),
+    );
+  });
+});
+
+describe("/approve-batch command", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("rejects invalid usage", async () => {
+    const cfg = {
+      commands: { text: true },
+      channels: { whatsapp: { allowFrom: ["*"] } },
+    } as OpenClawConfig;
+    const params = buildParams("/approve-batch", cfg);
+    const result = await handleCommands(params);
+    expect(result.shouldContinue).toBe(false);
+    expect(result.reply?.text).toContain("Usage: /approve-batch");
+  });
+
+  it("starts and reviews batch approvals for the current session", async () => {
+    const cfg = {
+      commands: { text: true },
+      channels: { whatsapp: { allowFrom: ["*"] } },
+    } as OpenClawConfig;
+    const startParams = buildParams("/approve-batch start", cfg, { SenderId: "123" });
+    const reviewParams = buildParams("/approve-batch review", cfg, { SenderId: "123" });
+
+    callGatewayMock.mockResolvedValueOnce({ ok: true, queuedCount: 2 }).mockResolvedValueOnce({
+      ok: true,
+      active: true,
+      queued: [
+        { id: "req-1", command: "echo one" },
+        { id: "req-2", command: "echo two" },
+      ],
+    });
+
+    const startResult = await handleCommands(startParams);
+    expect(startResult.shouldContinue).toBe(false);
+    expect(startResult.reply?.text).toContain("Batch approval mode started");
+    expect(callGatewayMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        method: "exec.approval.batch.start",
+        params: { sessionKey: "agent:main:main" },
+      }),
+    );
+
+    const reviewResult = await handleCommands(reviewParams);
+    expect(reviewResult.shouldContinue).toBe(false);
+    expect(reviewResult.reply?.text).toContain("Queued approvals (2)");
+    expect(reviewResult.reply?.text).toContain("1. req-1");
+    expect(reviewResult.reply?.text).toContain("2. req-2");
+    expect(callGatewayMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        method: "exec.approval.batch.review",
+        params: { sessionKey: "agent:main:main" },
+      }),
+    );
+  });
+
+  it("runs and denies queued batches", async () => {
+    const cfg = {
+      commands: { text: true },
+      channels: { whatsapp: { allowFrom: ["*"] } },
+    } as OpenClawConfig;
+    const runParams = buildParams("/approve-batch run", cfg, { SenderId: "123" });
+    const denyParams = buildParams("/approve-batch deny", cfg, { SenderId: "123" });
+
+    callGatewayMock
+      .mockResolvedValueOnce({ ok: true, resolvedCount: 3 })
+      .mockResolvedValueOnce({ ok: true, resolvedCount: 1 });
+
+    const runResult = await handleCommands(runParams);
+    expect(runResult.shouldContinue).toBe(false);
+    expect(runResult.reply?.text).toContain("Batch approved");
+    expect(runResult.reply?.text).toContain("3");
+    expect(callGatewayMock).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        method: "exec.approval.batch.run",
+        params: { sessionKey: "agent:main:main" },
+      }),
+    );
+
+    const denyResult = await handleCommands(denyParams);
+    expect(denyResult.shouldContinue).toBe(false);
+    expect(denyResult.reply?.text).toContain("Batch denied");
+    expect(denyResult.reply?.text).toContain("1");
+    expect(callGatewayMock).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        method: "exec.approval.batch.deny",
+        params: { sessionKey: "agent:main:main" },
+      }),
+    );
+  });
+});
+
 describe("/compact command", () => {
   beforeEach(() => {
     vi.clearAllMocks();

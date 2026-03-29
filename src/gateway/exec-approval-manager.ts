@@ -31,6 +31,11 @@ type PendingEntry<TPayload = ExecApprovalRequestPayload> = {
   promise: Promise<ExecApprovalDecision | null>;
 };
 
+type BatchSessionState = {
+  active: boolean;
+  queuedIds: string[];
+};
+
 export type ExecApprovalIdLookupResult =
   | { kind: "exact" | "prefix"; id: string }
   | { kind: "ambiguous"; ids: string[] }
@@ -38,6 +43,119 @@ export type ExecApprovalIdLookupResult =
 
 export class ExecApprovalManager<TPayload = ExecApprovalRequestPayload> {
   private pending = new Map<string, PendingEntry<TPayload>>();
+  private batchSessions = new Map<string, BatchSessionState>();
+
+  private normalizeBatchSessionKey(sessionKey: string | null | undefined): string | null {
+    if (typeof sessionKey !== "string") {
+      return null;
+    }
+    const trimmed = sessionKey.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private getRecordSessionKey(record: ExecApprovalRecord<TPayload>): string | null {
+    const request = record.request;
+    if (!request || typeof request !== "object" || Array.isArray(request)) {
+      return null;
+    }
+    const raw = (request as { sessionKey?: unknown }).sessionKey;
+    return typeof raw === "string" ? this.normalizeBatchSessionKey(raw) : null;
+  }
+
+  private removeFromBatchQueues(recordId: string): void {
+    for (const state of this.batchSessions.values()) {
+      const before = state.queuedIds.length;
+      if (before === 0) {
+        continue;
+      }
+      state.queuedIds = state.queuedIds.filter((id) => id !== recordId);
+    }
+  }
+
+  private queueForActiveBatch(record: ExecApprovalRecord<TPayload>): void {
+    const sessionKey = this.getRecordSessionKey(record);
+    if (!sessionKey) {
+      return;
+    }
+    const state = this.batchSessions.get(sessionKey);
+    if (!state?.active) {
+      return;
+    }
+    if (!state.queuedIds.includes(record.id)) {
+      state.queuedIds.push(record.id);
+    }
+  }
+
+  isBatchActive(sessionKey: string | null | undefined): boolean {
+    const normalized = this.normalizeBatchSessionKey(sessionKey);
+    if (!normalized) {
+      return false;
+    }
+    return this.batchSessions.get(normalized)?.active === true;
+  }
+
+  startBatch(sessionKey: string | null | undefined): {
+    active: boolean;
+    sessionKey: string | null;
+    queued: ExecApprovalRecord<TPayload>[];
+  } {
+    const normalized = this.normalizeBatchSessionKey(sessionKey);
+    if (!normalized) {
+      return { active: false, sessionKey: null, queued: [] };
+    }
+    const existing = this.batchSessions.get(normalized);
+    const state: BatchSessionState = existing ?? { active: true, queuedIds: [] };
+    state.active = true;
+    this.batchSessions.set(normalized, state);
+    const pendingForSession = [...this.pending.values()]
+      .map((entry) => entry.record)
+      .filter(
+        (record) =>
+          record.resolvedAtMs === undefined && this.getRecordSessionKey(record) === normalized,
+      )
+      .toSorted((left, right) => left.createdAtMs - right.createdAtMs);
+    for (const record of pendingForSession) {
+      if (!state.queuedIds.includes(record.id)) {
+        state.queuedIds.push(record.id);
+      }
+    }
+    return { active: true, sessionKey: normalized, queued: this.getBatchQueue(normalized).queued };
+  }
+
+  getBatchQueue(sessionKey: string | null | undefined): {
+    active: boolean;
+    sessionKey: string | null;
+    queued: ExecApprovalRecord<TPayload>[];
+  } {
+    const normalized = this.normalizeBatchSessionKey(sessionKey);
+    if (!normalized) {
+      return { active: false, sessionKey: null, queued: [] };
+    }
+    const state = this.batchSessions.get(normalized);
+    if (!state) {
+      return { active: false, sessionKey: normalized, queued: [] };
+    }
+    const queued: ExecApprovalRecord<TPayload>[] = [];
+    const nextIds: string[] = [];
+    for (const id of state.queuedIds) {
+      const record = this.getSnapshot(id);
+      if (!record || record.resolvedAtMs !== undefined) {
+        continue;
+      }
+      queued.push(record);
+      nextIds.push(id);
+    }
+    state.queuedIds = nextIds;
+    return { active: state.active, sessionKey: normalized, queued };
+  }
+
+  endBatch(sessionKey: string | null | undefined): void {
+    const normalized = this.normalizeBatchSessionKey(sessionKey);
+    if (!normalized) {
+      return;
+    }
+    this.batchSessions.delete(normalized);
+  }
 
   create(request: TPayload, timeoutMs: number, id?: string | null): ExecApprovalRecord<TPayload> {
     const now = Date.now();
@@ -87,6 +205,7 @@ export class ExecApprovalManager<TPayload = ExecApprovalRequestPayload> {
       this.expire(record.id);
     }, timeoutMs);
     this.pending.set(record.id, entry);
+    this.queueForActiveBatch(record);
     return promise;
   }
 
@@ -113,6 +232,7 @@ export class ExecApprovalManager<TPayload = ExecApprovalRequestPayload> {
     pending.record.resolvedAtMs = Date.now();
     pending.record.decision = decision;
     pending.record.resolvedBy = resolvedBy ?? null;
+    this.removeFromBatchQueues(recordId);
     // Resolve the promise first, then delete after a grace period.
     // This allows in-flight awaitDecision calls to find the resolved entry.
     pending.resolve(decision);
@@ -137,6 +257,7 @@ export class ExecApprovalManager<TPayload = ExecApprovalRequestPayload> {
     pending.record.resolvedAtMs = Date.now();
     pending.record.decision = undefined;
     pending.record.resolvedBy = resolvedBy ?? null;
+    this.removeFromBatchQueues(recordId);
     pending.resolve(null);
     setTimeout(() => {
       if (this.pending.get(recordId) === pending) {
@@ -206,5 +327,26 @@ export class ExecApprovalManager<TPayload = ExecApprovalRequestPayload> {
       return { kind: "ambiguous", ids: matches };
     }
     return { kind: "none" };
+  }
+
+  getPendingForSession(sessionKey: string | null | undefined): ExecApprovalRecord<TPayload>[] {
+    const normalized = this.normalizeBatchSessionKey(sessionKey);
+    if (!normalized) {
+      return [];
+    }
+    return [...this.pending.values()]
+      .map((entry) => entry.record)
+      .filter(
+        (record) =>
+          record.resolvedAtMs === undefined && this.getRecordSessionKey(record) === normalized,
+      )
+      .toSorted((left, right) => left.createdAtMs - right.createdAtMs);
+  }
+
+  getLatestPendingForSession(
+    sessionKey: string | null | undefined,
+  ): ExecApprovalRecord<TPayload> | null {
+    const pending = this.getPendingForSession(sessionKey);
+    return pending.length > 0 ? pending[pending.length - 1] : null;
   }
 }
