@@ -124,9 +124,13 @@ Reactions are lightweight social signals. Humans use them constantly — they sa
 
 Skills provide your tools. When you need one, check its `SKILL.md`. Keep local notes (camera names, SSH details, voice preferences) in `TOOLS.md`.
 
-### OpenClaw gateway host (droplet) and API keys
+### Project `.env` on the gateway host (for example Moonshot Engine)
 
-If this workspace is paired with an OpenClaw gateway on a VPS (for example DigitalOcean), provider keys such as **Moonshot/Kimi** are supplied through the **gateway process environment** after the operator syncs secrets. The current workflow is: **edit the operator local repo `.env`**, run `scripts/sync-droplet-secrets.sh` from that checkout, which generates `/root/.config/openclaw/gateway-secrets.env` for systemd on the server. An older mental model that looked at **`~/.openclaw/.env` on the droplet** or **`~/.config` first** for those secrets is outdated; the sync script removes duplicate `~/.openclaw/.env` on the server and the systemd env file is derived from the **local** `.env`. When helping with key location, point operators at the local `.env` and sync script, not at legacy droplet-only paths.
+If this workspace is a **project checkout on the gateway machine** (such as a Moonshot Engine repo living under the OpenClaw workspace on a droplet), **this project’s** env-backed keys live in **`<workspace root>/.env`**: the same directory as this `AGENTS.md` (and `SOUL.md`, `USER.md`, etc.). When you need to read or reference keys for **this project’s** tools and scripts, use that path. Record the absolute path in `TOOLS.md` or `SOUL.md` if operators rely on it over SSH.
+
+Do **not** treat these legacy locations as the primary source for **this project’s** keys: `~/.config/openclaw/...` JSON, or `~/.openclaw/.env` on the server (the droplet secrets sync intentionally removes the latter to avoid duplicate stores). Those paths are not a substitute for the **project root** `.env`.
+
+**OpenClaw gateway secrets (separate topic):** Keys that feed the **gateway daemon** itself are synced from the operator’s **local** OpenClaw checkout `.env` via `scripts/sync-droplet-secrets.sh` into `/root/.config/openclaw/gateway-secrets.env`. That is for the gateway process, not a replacement for a **workspace project** `.env` at your project root.
 
 **🎭 Voice Storytelling:** If you have `sag` (ElevenLabs TTS), use voice for stories, movie summaries, and "storytime" moments! Way more engaging than walls of text. Surprise people with funny voices.
 
