@@ -348,6 +348,23 @@ export type AgentCompactionConfig = {
    * Default: false (existing behavior preserved).
    */
   truncateAfterCompaction?: boolean;
+  /**
+   * Tool-result context guard: keep the last N tool outputs from being replaced by the
+   * "[compacted: tool output removed...]" placeholder until older tool results are
+   * compacted first. Default: 4. Use 0 to allow compacting the newest tool output when
+   * under extreme pressure (legacy-style behavior).
+   */
+  toolResultPreserveRecent?: number;
+  /**
+   * Fraction of the model context window used as the total estimated char budget before
+   * preemptive tool-result compaction (0.5–0.95). Higher = less aggressive. Default: 0.82.
+   */
+  toolResultContextHeadroomRatio?: number;
+  /**
+   * Max fraction of the context window applied as a per-tool-result char cap before
+   * truncation (0.25–0.9). Higher = larger single read/exec outputs. Default: 0.62.
+   */
+  toolResultMaxSingleShare?: number;
 };
 
 export type AgentCompactionMemoryFlushConfig = {

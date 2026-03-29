@@ -1230,6 +1230,48 @@
       "hasChildren": false
     },
     {
+      "path": "agents.defaults.compaction.toolResultContextHeadroomRatio",
+      "kind": "core",
+      "type": "number",
+      "required": false,
+      "deprecated": false,
+      "sensitive": false,
+      "tags": [
+        "advanced"
+      ],
+      "label": "Tool Result Context Headroom Ratio",
+      "help": "Fraction of the estimated context char budget used before preemptive tool-result compaction (default ~0.82). Lower values compact sooner; higher values keep more tool output visible but risk hitting model limits.",
+      "hasChildren": false
+    },
+    {
+      "path": "agents.defaults.compaction.toolResultMaxSingleShare",
+      "kind": "core",
+      "type": "number",
+      "required": false,
+      "deprecated": false,
+      "sensitive": false,
+      "tags": [
+        "performance"
+      ],
+      "label": "Tool Result Max Single Share",
+      "help": "Maximum fraction of the context budget a single tool result may occupy before truncation or placeholder replacement (default ~0.62). Raise for large single-shot reads; lower to force earlier trimming.",
+      "hasChildren": false
+    },
+    {
+      "path": "agents.defaults.compaction.toolResultPreserveRecent",
+      "kind": "core",
+      "type": "integer",
+      "required": false,
+      "deprecated": false,
+      "sensitive": false,
+      "tags": [
+        "advanced"
+      ],
+      "label": "Tool Result Preserve Recent",
+      "help": "Number of most recent tool results kept intact before older tool outputs are replaced with the compaction placeholder (default: 4). Set to 0 to match legacy oldest-first compaction across all tool results.",
+      "hasChildren": false
+    },
+    {
       "path": "agents.defaults.contextPruning",
       "kind": "core",
       "type": "object",

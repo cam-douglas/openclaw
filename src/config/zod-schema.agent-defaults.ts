@@ -109,6 +109,9 @@ export const AgentDefaultsSchema = z
         postCompactionSections: z.array(z.string()).optional(),
         model: z.string().optional(),
         timeoutSeconds: z.number().int().positive().optional(),
+        toolResultPreserveRecent: z.number().int().min(0).max(32).optional(),
+        toolResultContextHeadroomRatio: z.number().min(0.5).max(0.95).optional(),
+        toolResultMaxSingleShare: z.number().min(0.25).max(0.9).optional(),
         memoryFlush: z
           .object({
             enabled: z.boolean().optional(),

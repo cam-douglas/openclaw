@@ -129,7 +129,10 @@ import {
 } from "../system-prompt.js";
 import { dropThinkingBlocks } from "../thinking.js";
 import { collectAllowedToolNames } from "../tool-name-allowlist.js";
-import { installToolResultContextGuard } from "../tool-result-context-guard.js";
+import {
+  installToolResultContextGuard,
+  resolveToolResultContextGuardConfig,
+} from "../tool-result-context-guard.js";
 import { splitSdkTools } from "../tool-split.js";
 import { describeUnknownError, mapThinkingLevel } from "../utils.js";
 import { flushPendingToolResultsAfterIdle } from "../wait-for-idle-before-flush.js";
@@ -153,6 +156,7 @@ import {
   stripSessionsYieldArtifacts,
   waitForSessionsYieldAbortSettle,
 } from "./attempt.sessions-yield.js";
+import { wrapStreamFnHandleSensitiveStopReason } from "./attempt.stop-reason-recovery.js";
 import {
   appendAttemptCacheTtlIfNeeded,
   composeSystemPromptWithHookContext,
@@ -164,7 +168,6 @@ import {
   wrapStreamFnDecodeXaiToolCallArguments,
   wrapStreamFnRepairMalformedToolCallArguments,
 } from "./attempt.tool-call-argument-repair.js";
-import { wrapStreamFnHandleSensitiveStopReason } from "./attempt.stop-reason-recovery.js";
 import {
   wrapStreamFnSanitizeMalformedToolCalls,
   wrapStreamFnTrimToolCallNames,
@@ -854,6 +857,7 @@ export async function runEmbeddedAttempt(
             params.model.contextWindow ?? params.model.maxTokens ?? DEFAULT_CONTEXT_TOKENS,
           ),
         ),
+        guardConfig: resolveToolResultContextGuardConfig(params.config),
       });
       const cacheTrace = createCacheTrace({
         cfg: params.config,

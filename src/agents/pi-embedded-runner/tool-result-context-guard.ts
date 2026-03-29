@@ -1,4 +1,5 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import type { AgentCompactionConfig } from "../../config/types.agent-defaults.js";
 import {
   CHARS_PER_TOKEN_ESTIMATE,
   TOOL_RESULT_CHARS_PER_TOKEN_ESTIMATE,
@@ -11,12 +12,16 @@ import {
   isToolResultMessage,
 } from "./tool-result-char-estimator.js";
 
-// Keep a conservative input budget to absorb tokenizer variance and provider framing overhead.
-const CONTEXT_INPUT_HEADROOM_RATIO = 0.75;
-const SINGLE_TOOL_RESULT_CONTEXT_SHARE = 0.5;
+/** Default ratio of context window used as estimated total char budget (was 0.75; raised to reduce spurious compaction). */
+const DEFAULT_CONTEXT_INPUT_HEADROOM_RATIO = 0.82;
+/** Default max share of context window per single tool result (was 0.5). */
+const DEFAULT_SINGLE_TOOL_RESULT_CONTEXT_SHARE = 0.62;
 // High-water mark: if context exceeds this ratio after tool-result compaction,
 // trigger full session compaction via the existing overflow recovery cascade.
 const PREEMPTIVE_OVERFLOW_RATIO = 0.9;
+
+/** Do not replace the last N tool outputs with the placeholder until older tool results are compacted. */
+const DEFAULT_PRESERVE_RECENT_TOOL_RESULTS = 4;
 
 export const CONTEXT_LIMIT_TRUNCATION_NOTICE = "[truncated: output exceeded context limit]";
 const CONTEXT_LIMIT_TRUNCATION_SUFFIX = `\n${CONTEXT_LIMIT_TRUNCATION_NOTICE}`;
@@ -26,6 +31,36 @@ export const PREEMPTIVE_TOOL_RESULT_COMPACTION_PLACEHOLDER =
 
 export const PREEMPTIVE_CONTEXT_OVERFLOW_MESSAGE =
   "Preemptive context overflow: estimated context size exceeds safe threshold during tool loop";
+
+export type ToolResultContextGuardConfig = {
+  preserveRecentToolResults: number;
+  headroomRatio: number;
+  singleResultShare: number;
+};
+
+function clamp(n: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, n));
+}
+
+export function resolveToolResultContextGuardConfig(
+  cfg: { agents?: { defaults?: { compaction?: AgentCompactionConfig } } } | undefined,
+): ToolResultContextGuardConfig {
+  const c = cfg?.agents?.defaults?.compaction;
+  return {
+    preserveRecentToolResults:
+      typeof c?.toolResultPreserveRecent === "number"
+        ? clamp(Math.floor(c.toolResultPreserveRecent), 0, 32)
+        : DEFAULT_PRESERVE_RECENT_TOOL_RESULTS,
+    headroomRatio:
+      typeof c?.toolResultContextHeadroomRatio === "number"
+        ? clamp(c.toolResultContextHeadroomRatio, 0.5, 0.95)
+        : DEFAULT_CONTEXT_INPUT_HEADROOM_RATIO,
+    singleResultShare:
+      typeof c?.toolResultMaxSingleShare === "number"
+        ? clamp(c.toolResultMaxSingleShare, 0.25, 0.9)
+        : DEFAULT_SINGLE_TOOL_RESULT_CONTEXT_SHARE,
+  };
+}
 
 type GuardableTransformContext = (
   messages: AgentMessage[],
@@ -97,18 +132,29 @@ function truncateToolResultToChars(
   return replaceToolResultText(msg, truncatedText);
 }
 
-function compactExistingToolResultsInPlace(params: {
+function listToolResultMessageIndices(messages: AgentMessage[]): number[] {
+  const indices: number[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    if (isToolResultMessage(messages[i])) {
+      indices.push(i);
+    }
+  }
+  return indices;
+}
+
+function compactToolResultsToPlaceholderInOrder(params: {
   messages: AgentMessage[];
+  orderedIndices: number[];
   charsNeeded: number;
   cache: MessageCharEstimateCache;
 }): number {
-  const { messages, charsNeeded, cache } = params;
+  const { messages, orderedIndices, charsNeeded, cache } = params;
   if (charsNeeded <= 0) {
     return 0;
   }
 
   let reduced = 0;
-  for (let i = 0; i < messages.length; i++) {
+  for (const i of orderedIndices) {
     const msg = messages[i];
     if (!isToolResultMessage(msg)) {
       continue;
@@ -133,6 +179,41 @@ function compactExistingToolResultsInPlace(params: {
   }
 
   return reduced;
+}
+
+function compactExistingToolResultsInPlace(params: {
+  messages: AgentMessage[];
+  charsNeeded: number;
+  cache: MessageCharEstimateCache;
+  preserveRecentToolResults: number;
+}): void {
+  const { messages, charsNeeded, cache, preserveRecentToolResults } = params;
+  if (charsNeeded <= 0) {
+    return;
+  }
+
+  const toolIndices = listToolResultMessageIndices(messages);
+  const protectedSet = new Set(
+    preserveRecentToolResults > 0 ? toolIndices.slice(-preserveRecentToolResults) : [],
+  );
+
+  const unprotected = toolIndices.filter((i) => !protectedSet.has(i));
+  let reduced = compactToolResultsToPlaceholderInOrder({
+    messages,
+    orderedIndices: unprotected,
+    charsNeeded,
+    cache,
+  });
+
+  if (reduced < charsNeeded && protectedSet.size > 0) {
+    const protectedOrdered = toolIndices.filter((i) => protectedSet.has(i));
+    compactToolResultsToPlaceholderInOrder({
+      messages,
+      orderedIndices: protectedOrdered,
+      charsNeeded: charsNeeded - reduced,
+      cache,
+    });
+  }
 }
 
 function applyMessageMutationInPlace(
@@ -161,8 +242,10 @@ function enforceToolResultContextBudgetInPlace(params: {
   messages: AgentMessage[];
   contextBudgetChars: number;
   maxSingleToolResultChars: number;
+  preserveRecentToolResults: number;
 }): void {
-  const { messages, contextBudgetChars, maxSingleToolResultChars } = params;
+  const { messages, contextBudgetChars, maxSingleToolResultChars, preserveRecentToolResults } =
+    params;
   const estimateCache = createMessageCharEstimateCache();
 
   // Ensure each tool result has an upper bound before considering total context usage.
@@ -179,28 +262,30 @@ function enforceToolResultContextBudgetInPlace(params: {
     return;
   }
 
-  // Compact oldest tool outputs first until the context is back under budget.
+  // Compact oldest tool outputs first; prefer replacing older outputs before the last N tool results.
   compactExistingToolResultsInPlace({
     messages,
     charsNeeded: currentChars - contextBudgetChars,
     cache: estimateCache,
+    preserveRecentToolResults,
   });
 }
 
 export function installToolResultContextGuard(params: {
   agent: GuardableAgent;
   contextWindowTokens: number;
+  /** When omitted, uses defaults and optional `agents.defaults.compaction` overrides. */
+  guardConfig?: ToolResultContextGuardConfig;
 }): () => void {
+  const g = params.guardConfig ?? resolveToolResultContextGuardConfig(undefined);
   const contextWindowTokens = Math.max(1, Math.floor(params.contextWindowTokens));
   const contextBudgetChars = Math.max(
     1_024,
-    Math.floor(contextWindowTokens * CHARS_PER_TOKEN_ESTIMATE * CONTEXT_INPUT_HEADROOM_RATIO),
+    Math.floor(contextWindowTokens * CHARS_PER_TOKEN_ESTIMATE * g.headroomRatio),
   );
   const maxSingleToolResultChars = Math.max(
     1_024,
-    Math.floor(
-      contextWindowTokens * TOOL_RESULT_CHARS_PER_TOKEN_ESTIMATE * SINGLE_TOOL_RESULT_CONTEXT_SHARE,
-    ),
+    Math.floor(contextWindowTokens * TOOL_RESULT_CHARS_PER_TOKEN_ESTIMATE * g.singleResultShare),
   );
   const preemptiveOverflowChars = Math.max(
     contextBudgetChars,
@@ -222,6 +307,7 @@ export function installToolResultContextGuard(params: {
       messages: contextMessages,
       contextBudgetChars,
       maxSingleToolResultChars,
+      preserveRecentToolResults: g.preserveRecentToolResults,
     });
 
     // After tool-result compaction, check if context still exceeds the high-water mark.

@@ -2397,6 +2397,21 @@ export const GENERATED_BASE_CONFIG_SCHEMA = {
                     exclusiveMinimum: 0,
                     maximum: 9007199254740991,
                   },
+                  toolResultPreserveRecent: {
+                    type: "integer",
+                    minimum: 0,
+                    maximum: 32,
+                  },
+                  toolResultContextHeadroomRatio: {
+                    type: "number",
+                    minimum: 0.5,
+                    maximum: 0.95,
+                  },
+                  toolResultMaxSingleShare: {
+                    type: "number",
+                    minimum: 0.25,
+                    maximum: 0.9,
+                  },
                   memoryFlush: {
                     type: "object",
                     properties: {
@@ -14074,6 +14089,21 @@ export const GENERATED_BASE_CONFIG_SCHEMA = {
     "agents.defaults.compaction.truncateAfterCompaction": {
       label: "Truncate After Compaction",
       help: "When enabled, rewrites the session JSONL file after compaction to remove entries that were summarized. Prevents unbounded file growth in long-running sessions with many compaction cycles. Default: false.",
+      tags: ["advanced"],
+    },
+    "agents.defaults.compaction.toolResultContextHeadroomRatio": {
+      label: "Tool Result Context Headroom Ratio",
+      help: "Fraction of the estimated context char budget used before preemptive tool-result compaction (default ~0.82). Lower values compact sooner; higher values keep more tool output visible but risk hitting model limits.",
+      tags: ["advanced"],
+    },
+    "agents.defaults.compaction.toolResultMaxSingleShare": {
+      label: "Tool Result Max Single Share",
+      help: "Maximum fraction of the context budget a single tool result may occupy before truncation or placeholder replacement (default ~0.62). Raise for large single-shot reads; lower to force earlier trimming.",
+      tags: ["performance"],
+    },
+    "agents.defaults.compaction.toolResultPreserveRecent": {
+      label: "Tool Result Preserve Recent",
+      help: "Number of most recent tool results kept intact before older tool outputs are replaced with the compaction placeholder (default: 4). Set to 0 to match legacy oldest-first compaction across all tool results.",
       tags: ["advanced"],
     },
     "agents.defaults.compaction.memoryFlush": {
