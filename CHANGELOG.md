@@ -12,6 +12,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Gateway: preserve self-declared operator scopes for TUI and Control UI when connecting with token or password from a **non-loopback** host (for example `openclaw tui` to a droplet), so exec approval resolution (`/approve`, yes/no) is not blocked by empty `GatewayClientScopes`.
 - Exec approvals: natural-language replies (for example ok, go ahead, yes please, cancel) resolve pending dangerous/exec approvals; when the pending request is tied to a different session (such as a subagent), yes/no now falls back to the latest pending approval for the same agent id.
 - LINE/ACP: add current-conversation binding and inbound binding-routing parity so `/acp spawn ... --thread here`, configured ACP bindings, and active conversation-bound ACP sessions work on LINE like the other conversation channels.
 - LINE/markdown: preserve underscores inside Latin, Cyrillic, and CJK words when stripping markdown, while still removing standalone `_italic_` markers on the shared text-runtime path used by LINE and TTS. (#47465) Thanks @jackjin1997.

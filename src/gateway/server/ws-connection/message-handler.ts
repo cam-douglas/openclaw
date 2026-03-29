@@ -530,6 +530,14 @@ export function attachGatewayWsMessageHandler(params: {
             controlUiAuthPolicy.allowInsecureAuthConfigured &&
             isLocalClient &&
             (authMethod === "token" || authMethod === "password");
+          // Remote TUI / Control UI (non-loopback) still authenticates with shared token/password.
+          // Without this, `clearUnboundScopes` strips self-declared operator scopes and breaks
+          // exec approval resolution (`exec.approval.*`, `/approve`, yes/no) for internal webchat.
+          const preserveControlUiSharedAuthScopes =
+            isControlUi &&
+            authOk &&
+            sharedAuthOk &&
+            (authMethod === "token" || authMethod === "password");
           const decision = evaluateMissingDeviceIdentity({
             hasDeviceIdentity: Boolean(device),
             role,
@@ -549,6 +557,7 @@ export function attachGatewayWsMessageHandler(params: {
             (decision.kind !== "allow" ||
               (!controlUiAuthPolicy.allowBypass &&
                 !preserveInsecureLocalControlUiScopes &&
+                !preserveControlUiSharedAuthScopes &&
                 (authMethod === "token" || authMethod === "password" || trustedProxyAuthOk)))
           ) {
             clearUnboundScopes();
