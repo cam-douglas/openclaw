@@ -201,6 +201,10 @@ describe("resolveContextTokensForModel", () => {
     expect(isLikelyStaleOutputCapPersistedAsSessionContext(8192, undefined)).toBe(false);
   });
 
+  it("treats 16k-class persisted caps as stale when resolved window is smaller than persisted", () => {
+    expect(isLikelyStaleOutputCapPersistedAsSessionContext(16_384, 8192)).toBe(true);
+  });
+
   it("returns 1M context for claude-cli when context1m is enabled on the CLI model key", () => {
     const result = resolveContextTokensForModel({
       cfg: {

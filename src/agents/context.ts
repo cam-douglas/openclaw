@@ -283,6 +283,33 @@ function resolveConfiguredModelParams(
   return undefined;
 }
 
+/**
+ * Session rows sometimes store both `modelProvider` and a slash model id that
+ * repeats the provider (`claude-cli` + `claude-cli/claude-sonnet-4-6`). That
+ * breaks CLI context resolution (the inner model still contains `/`, so the
+ * upstream API fallback path never runs). Strip one or more matching prefixes.
+ */
+function stripDuplicateProviderPrefixFromModel(provider: string, model: string): string {
+  const p = normalizeProviderId(provider);
+  let next = model.trim();
+  for (;;) {
+    const slash = next.indexOf("/");
+    if (slash <= 0) {
+      return next;
+    }
+    const head = next.slice(0, slash);
+    const tail = next.slice(slash + 1).trim();
+    if (!tail) {
+      return next;
+    }
+    if (normalizeProviderId(head) === p) {
+      next = tail;
+      continue;
+    }
+    return next;
+  }
+}
+
 function resolveProviderModelRef(params: {
   provider?: string;
   model?: string;
@@ -297,7 +324,8 @@ function resolveProviderModelRef(params: {
     if (!provider) {
       return undefined;
     }
-    return { provider, model: modelRaw };
+    const model = stripDuplicateProviderPrefixFromModel(provider, modelRaw);
+    return { provider, model };
   }
   const slash = modelRaw.indexOf("/");
   if (slash <= 0) {
@@ -564,6 +592,12 @@ export function isLikelyStaleOutputCapPersistedAsSessionContext(
     return persisted === 16_384 || persisted === 32_768 || persisted === 65_536;
   }
   if (persisted > resolvedModelWindow) {
+    // Known output-cap snapshots are not trustworthy when discovery resolves to a
+    // smaller window (e.g. garbage / partial cache); otherwise we keep 16k as the
+    // denominator when the catalog is wrong low.
+    if (persisted === 16_384 || persisted === 32_768 || persisted === 65_536) {
+      return true;
+    }
     return false;
   }
   if (!STALE_SESSION_CONTEXT_MARKERS.has(persisted)) {

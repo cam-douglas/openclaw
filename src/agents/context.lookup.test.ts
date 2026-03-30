@@ -410,6 +410,21 @@ describe("resolveContextTokensForModel claude-cli", () => {
     expect(result).toBe(200_000);
   });
 
+  it("resolves Claude CLI when duplicate provider prefix is stored on the model field", async () => {
+    mockDiscoveryDeps([{ id: "claude-cli/claude-sonnet-4-6", contextWindow: 16_384 }], {
+      anthropic: {
+        models: [{ id: "claude-sonnet-4-6", contextWindow: 200_000 }],
+      },
+    });
+    const resolveContextTokensForModel = await importResolveContextTokensForModel();
+    const result = resolveContextTokensForModel({
+      provider: "claude-cli",
+      model: "claude-cli/claude-sonnet-4-6",
+      allowAsyncLoad: false,
+    });
+    expect(result).toBe(200_000);
+  });
+
   it("resolves Gemini CLI via Google limits when discovery stores 16k under google-gemini-cli/...", async () => {
     mockDiscoveryDeps([{ id: "google-gemini-cli/gemini-2.5-pro", contextWindow: 16_384 }], {
       google: {

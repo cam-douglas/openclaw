@@ -14,6 +14,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- TUI/sessions: context windows for **CLI backends** no longer stick on **`/16k`** when the session row repeats the provider in the model field (**`claude-cli` + `claude-cli/claude-sonnet-4-6`**), and stale **`sessions.json` `contextTokens`** in the **16k/32k/64k** output-cap class are ignored when discovery resolves to a **smaller** bogus window than the persisted cap.
 - Status/sessions: **`openclaw status`** and **`sessions`** listings no longer treat stale **`sessions.json` `contextTokens`** values that match common **per-response output** sizes (for example **16k**) as the context window when the resolved model window is much larger, so token lines stop showing **`/16k`** for Claude-class models after older runs persisted the wrong field.
 - Gateway/Control UI: session rows from **`buildGatewaySessionRow`** use the same stale-**`contextTokens`** repair and transcript fallback as the CLI, so listings no longer show **`?/16k`** when the store has a bogus **16k** window but missing live totals.
 - Agents/reply: **`persistRunSessionUsage`** resolves **`contextTokens`** with the same repair before persisting, so **`sessions.json`** converges toward the real model window across turns.
