@@ -428,7 +428,7 @@ function isMistakenOutputCapCatalogWindow(value: number): boolean {
 }
 
 /** Discovery bare lookups sometimes return max-output (~16k/32k/64k) as the "window"; prefer fallback when that happens. */
-function sanitizeMistakenOutputCapAsContextWindow(
+export function sanitizeMistakenOutputCapAsContextWindow(
   value: number | undefined,
   fallback: number | undefined,
 ): number | undefined {
@@ -629,6 +629,11 @@ export function resolveSessionPersistedContextTokensForDisplay(params: {
 }): number | undefined {
   const p = params.persisted;
   if (typeof p !== "number" || p <= 0) {
+    return undefined;
+  }
+  // Never trust these as session context limits (legacy max-output caps mistaken for windows).
+  // Model-derived resolution must win; avoids `?/16k` when stale heuristics miss edge ratios.
+  if (p === 16_384 || p === 32_768 || p === 65_536) {
     return undefined;
   }
   const resolved = resolveContextTokensForModel({

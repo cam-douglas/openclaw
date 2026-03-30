@@ -512,4 +512,20 @@ describe("resolveSessionPersistedContextTokensForDisplay", () => {
       }),
     ).toBe(50_000);
   });
+
+  it("always ignores persisted 16k-class caps even when resolved window is in an awkward middle band", async () => {
+    const cfg = createContextOverrideConfig("anthropic", "claude-awkward-band", 50_000);
+    mockDiscoveryDeps([]);
+    const { resolveSessionPersistedContextTokensForDisplay } = await import("./context.js");
+    await flushAsyncWarmup();
+
+    expect(
+      resolveSessionPersistedContextTokensForDisplay({
+        persisted: 16_384,
+        cfg: cfg as never,
+        provider: "anthropic",
+        model: "claude-awkward-band",
+      }),
+    ).toBeUndefined();
+  });
 });

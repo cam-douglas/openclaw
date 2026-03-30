@@ -9,6 +9,7 @@ import {
 import {
   resolveContextTokensForModel,
   resolveSessionPersistedContextTokensForDisplay,
+  sanitizeMistakenOutputCapAsContextWindow,
 } from "../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import {
@@ -1015,7 +1016,7 @@ export function getSessionDefaults(cfg: OpenClawConfig): GatewaySessionsDefaults
     fallbackContextTokens: DEFAULT_CONTEXT_TOKENS,
     allowAsyncLoad: false,
   });
-  const contextTokens =
+  const contextTokensResolved =
     repairedPersisted ??
     resolveContextTokensForModel({
       cfg,
@@ -1025,6 +1026,9 @@ export function getSessionDefaults(cfg: OpenClawConfig): GatewaySessionsDefaults
       allowAsyncLoad: false,
     }) ??
     DEFAULT_CONTEXT_TOKENS;
+  const contextTokens =
+    sanitizeMistakenOutputCapAsContextWindow(contextTokensResolved, DEFAULT_CONTEXT_TOKENS) ??
+    contextTokensResolved;
   return {
     modelProvider: resolved.provider ?? null,
     model: resolved.model ?? null,
@@ -1239,7 +1243,7 @@ export function buildGatewaySessionRow(params: {
       model,
       entry,
     }) ?? resolveNonNegativeNumber(transcriptUsage?.estimatedCostUsd);
-  const contextTokens =
+  const contextTokensRaw =
     repairedSessionContext ??
     resolvePositiveNumber(transcriptUsage?.contextTokens) ??
     resolvePositiveNumber(
@@ -1251,6 +1255,9 @@ export function buildGatewaySessionRow(params: {
         allowAsyncLoad: false,
       }),
     );
+  const contextTokens =
+    sanitizeMistakenOutputCapAsContextWindow(contextTokensRaw, DEFAULT_CONTEXT_TOKENS) ??
+    contextTokensRaw;
 
   let derivedTitle: string | undefined;
   let lastMessagePreview: string | undefined;
