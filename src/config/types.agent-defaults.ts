@@ -357,7 +357,7 @@ export type AgentCompactionConfig = {
   toolResultPreserveRecent?: number;
   /**
    * Fraction of the model context window used as the total estimated char budget before
-   * preemptive tool-result compaction (0.5–0.95). Higher = less aggressive. Default: 0.82.
+   * preemptive tool-result compaction (0.5–0.95). Higher = less aggressive. Default: 0.95.
    */
   toolResultContextHeadroomRatio?: number;
   /**

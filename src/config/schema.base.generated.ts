@@ -14093,7 +14093,7 @@ export const GENERATED_BASE_CONFIG_SCHEMA = {
     },
     "agents.defaults.compaction.toolResultContextHeadroomRatio": {
       label: "Tool Result Context Headroom Ratio",
-      help: "Fraction of the estimated context char budget used before preemptive tool-result compaction (default ~0.82). Lower values compact sooner; higher values keep more tool output visible but risk hitting model limits.",
+      help: "Fraction of the estimated context char budget used before preemptive tool-result compaction (default ~0.95). Lower values compact sooner; higher values keep more tool output visible but risk hitting model limits.",
       tags: ["advanced"],
     },
     "agents.defaults.compaction.toolResultMaxSingleShare": {

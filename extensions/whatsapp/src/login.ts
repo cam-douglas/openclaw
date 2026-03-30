@@ -27,6 +27,7 @@ export async function loginWeb(
   const account = resolveWhatsAppAccount({ cfg, accountId });
   const sock = await createWaSocket(true, verbose, {
     authDir: account.authDir,
+    qrTempFileLabel: account.accountId,
   });
   logInfo("Waiting for WhatsApp connection...", runtime);
   try {

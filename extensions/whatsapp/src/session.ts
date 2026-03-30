@@ -20,6 +20,7 @@ import {
   resolveWebCredsBackupPath,
   resolveWebCredsPath,
 } from "./auth-store.js";
+import { writeRawWhatsAppQrToTempPng } from "./qr-temp-file.js";
 import { formatError, getStatusCode } from "./session-errors.js";
 export { formatError, getStatusCode } from "./session-errors.js";
 
@@ -101,7 +102,7 @@ async function safeSaveCreds(
 export async function createWaSocket(
   printQr: boolean,
   verbose: boolean,
-  opts: { authDir?: string; onQr?: (qr: string) => void } = {},
+  opts: { authDir?: string; onQr?: (qr: string) => void; qrTempFileLabel?: string } = {},
 ): Promise<ReturnType<typeof makeWASocket>> {
   const baseLogger = getChildLogger(
     { module: "baileys" },
@@ -139,7 +140,14 @@ export async function createWaSocket(
           opts.onQr?.(qr);
           if (printQr) {
             console.log("Scan this QR in WhatsApp (Linked Devices):");
-            qrcode.generate(qr, { small: true });
+            // Larger glyphs scan more reliably than `small: true` over SSH / web terminals.
+            qrcode.generate(qr, { small: false });
+            const label = opts.qrTempFileLabel?.trim() || "default";
+            void writeRawWhatsAppQrToTempPng(qr, label).then((pngPath) => {
+              if (pngPath) {
+                console.log(`PNG saved on this host (open or copy): ${pngPath}`);
+              }
+            });
           }
         }
         if (connection === "close") {

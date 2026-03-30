@@ -321,6 +321,8 @@ export type ChannelLogoutResult = {
 
 export type ChannelLoginWithQrStartResult = {
   qrDataUrl?: string;
+  /** Gateway-local path to a PNG (for SSH/headless; scan or copy from the host running OpenClaw). */
+  qrPngPath?: string;
   message: string;
 };
 

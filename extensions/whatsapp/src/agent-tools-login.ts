@@ -2,6 +2,12 @@ import { Type } from "@sinclair/typebox";
 import type { ChannelAgentTool } from "openclaw/plugin-sdk/channel-contract";
 import { startWebLoginWithQr, waitForWebLogin } from "../login-qr-api.js";
 
+function pngBase64FromDataUrl(qrDataUrl: string): string | null {
+  const match = qrDataUrl.trim().match(/^data:image\/png;base64,(.+)$/i);
+  const raw = (match?.[1] ?? "").trim();
+  return raw.length > 0 ? raw : null;
+}
+
 export function createWhatsAppLoginTool(): ChannelAgentTool {
   return {
     label: "WhatsApp Login",
@@ -56,16 +62,29 @@ export function createWhatsAppLoginTool(): ChannelAgentTool {
         };
       }
 
-      const text = [
+      const pngBase64 = pngBase64FromDataUrl(result.qrDataUrl);
+      const textLines = [
         result.message,
         "",
-        "Open WhatsApp → Linked Devices and scan:",
-        "",
-        `![whatsapp-qr](${result.qrDataUrl})`,
-      ].join("\n");
+        "Open WhatsApp → Linked Devices and scan the QR in the attached image.",
+      ];
+      if (result.qrPngPath) {
+        textLines.push(
+          "",
+          `PNG on gateway host: ${result.qrPngPath}`,
+          "Open that file on the server or copy it locally (for example scp) if the image does not show in chat.",
+        );
+      }
+      const content: Array<
+        { type: "text"; text: string } | { type: "image"; data: string; mimeType: string }
+      > = [{ type: "text", text: textLines.join("\n") }];
+      if (pngBase64) {
+        // Structured image block: many clients render this; markdown data URLs often do not.
+        content.push({ type: "image", data: pngBase64, mimeType: "image/png" });
+      }
       return {
-        content: [{ type: "text", text }],
-        details: { qr: true },
+        content,
+        details: { qr: true, qrPngPath: result.qrPngPath },
       };
     },
   };

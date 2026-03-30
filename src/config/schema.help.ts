@@ -1079,7 +1079,7 @@ export const FIELD_HELP: Record<string, string> = {
   "agents.defaults.compaction.truncateAfterCompaction":
     "When enabled, rewrites the session JSONL file after compaction to remove entries that were summarized. Prevents unbounded file growth in long-running sessions with many compaction cycles. Default: false.",
   "agents.defaults.compaction.toolResultContextHeadroomRatio":
-    "Fraction of the estimated context char budget used before preemptive tool-result compaction (default ~0.82). Lower values compact sooner; higher values keep more tool output visible but risk hitting model limits.",
+    "Fraction of the estimated context char budget used before preemptive tool-result compaction (default ~0.95). Lower values compact sooner; higher values keep more tool output visible but risk hitting model limits.",
   "agents.defaults.compaction.toolResultMaxSingleShare":
     "Maximum fraction of the context budget a single tool result may occupy before truncation or placeholder replacement (default ~0.62). Raise for large single-shot reads; lower to force earlier trimming.",
   "agents.defaults.compaction.toolResultPreserveRecent":

@@ -41,6 +41,7 @@ import {
   dropletRemoteHomeForUser,
   mergeDropletForwardGatewayEnvFromEnvFiles,
   playDropletRemoteCompletionChime,
+  isTrailingDropletRemoteInvocation,
   stripTrailingDroplet,
   tryLoadDropletIpFromHomeCheckoutEnv,
 } from "./droplet-remote.js";
@@ -135,6 +136,18 @@ describe("stripTrailingDroplet", () => {
       ok: true,
       argv: ["node", "openclaw", "models", "status", "--probe"],
     });
+  });
+});
+
+describe("isTrailingDropletRemoteInvocation", () => {
+  it("is true when argv ends with droplet (same as stripTrailingDroplet ok)", () => {
+    expect(isTrailingDropletRemoteInvocation(["node", "openclaw", "tui", "droplet"])).toBe(true);
+    expect(isTrailingDropletRemoteInvocation(["node", "openclaw", "status", "droplet"])).toBe(true);
+  });
+
+  it("is false without trailing droplet or too-short argv", () => {
+    expect(isTrailingDropletRemoteInvocation(["node", "openclaw", "status"])).toBe(false);
+    expect(isTrailingDropletRemoteInvocation(["openclaw", "droplet"])).toBe(false);
   });
 });
 

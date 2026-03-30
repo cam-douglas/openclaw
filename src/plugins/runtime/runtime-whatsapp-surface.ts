@@ -233,7 +233,7 @@ export type WhatsAppHeavyRuntimeModule = {
     force?: boolean;
     accountId?: string;
     runtime?: RuntimeEnv;
-  }) => Promise<{ qrDataUrl?: string; message: string }>;
+  }) => Promise<{ qrDataUrl?: string; qrPngPath?: string; message: string }>;
   waitForWaConnection: (sock: WhatsAppWaSocket) => Promise<void>;
   waitForWebLogin: (opts?: {
     timeoutMs?: number;

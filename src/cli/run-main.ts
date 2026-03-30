@@ -19,7 +19,7 @@ import {
 } from "./argv.js";
 import { maybeRunCliInContainer, parseCliContainerArgs } from "./container-target.js";
 import { loadCliDotEnv } from "./dotenv.js";
-import { tryHandleDropletRemoteCli } from "./droplet-remote.js";
+import { isTrailingDropletRemoteInvocation, tryHandleDropletRemoteCli } from "./droplet-remote.js";
 import { applyCliProfileEnv, parseCliProfileArgs } from "./profile.js";
 import { tryRouteCli } from "./route.js";
 import { normalizeWindowsArgv } from "./windows-argv.js";
@@ -109,6 +109,7 @@ export function shouldRequireLocalSudoAuth(
   return isTruthyFlag(env.OPENCLAW_REQUIRE_LOCAL_SUDO);
 }
 
+/** Not used for trailing `… droplet` (see `isTrailingDropletRemoteInvocation`) — droplet runs its own sudo gate. */
 export function enforceLocalSudoAuthOnceForInvocation(): void {
   execFileSync("sudo", ["-v"], { stdio: "inherit" });
   try {
@@ -158,7 +159,7 @@ export async function runCli(argv: string[] = process.argv) {
     loadCliDotEnv({ quiet: true });
   }
   normalizeEnv();
-  if (shouldRequireLocalSudoAuth()) {
+  if (shouldRequireLocalSudoAuth() && !isTrailingDropletRemoteInvocation(normalizedArgv)) {
     enforceLocalSudoAuthOnceForInvocation();
   }
   if (tryHandleDropletRemoteCli(normalizedArgv)) {

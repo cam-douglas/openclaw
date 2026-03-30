@@ -6,12 +6,17 @@ Docs: https://docs.openclaw.ai
 
 ### Changes
 
+- macOS completion chime: support **`OPENCLAW_COMPLETION_SOUND_NAME`** / **`OPENCLAW_DROPLET_COMPLETION_SOUND_NAME`** (default **Funk**); aliases **`funky`** and **`funk`** map to the **Funk** system sound file.
+- macOS/TUI: play the same Funk completion chime when a TUI chat run finishes (local `openclaw tui` to any gateway, including a droplet); optional `OPENCLAW_TUI_COMPLETION_SOUND=0` or global `OPENCLAW_COMPLETION_SOUND=0`.
 - Droplet/macOS: after `openclaw … droplet` SSH completes, play the system sound Funk by default (`OPENCLAW_DROPLET_COMPLETION_SOUND=0` to disable; optional path and success-only env vars).
 - Droplet helpers: share a single sudo gate with **one** `sudo -v` (removed `sudo -n -v` prefix that could double-prompt on macOS), run the sync script gate only after local env/SSH options validate, and allow `OPENCLAW_DROPLET_SUDO_GATE=0` for automation; `openclaw … droplet` matches.
 - LINE/outbound media: add LINE image, video, and audio outbound sends on the LINE-specific delivery path, including explicit preview/tracking handling for videos while keeping generic media sends on the existing image-only route. (#45826) Thanks @masatohoshino.
 
 ### Fixes
 
+- Agents/context: the embedded tool-result guard no longer treats **`model.maxTokens`** (per-response output cap, often ~16k) as the **context window**, which could show **>200%** usage and compact far too early vs Claude’s **~200k** API context; it now uses the same resolved context window as the rest of OpenClaw (`resolveContextWindowInfo`). Default **`toolResultContextHeadroomRatio`** is **0.95** (preemptive tool-result compaction closer to the real limit); the post-tool overflow high-water mark is **~98%** so it stays above the tool budget and can still trigger session compaction when non-tool content dominates.
+- Droplet/macOS: with **`OPENCLAW_REQUIRE_LOCAL_SUDO`**, skip the global **`sudo -v` / `sudo -k`** pass for trailing **`openclaw … droplet`** so the droplet helper’s single **`sudo -v`** before SSH does not immediately follow a revoked timestamp and prompt twice.
+- WhatsApp/QR: `whatsapp_login` now returns a structured **image** tool result (not only a markdown data URL) and saves **`openclaw-whatsapp-qr-<account>.png`** on the gateway host; `channels login` uses a larger terminal QR and writes the same PNG path for headless/VPS use.
 - Gateway: preserve self-declared operator scopes for TUI and Control UI when connecting with token or password from a **non-loopback** host (for example `openclaw tui` to a droplet), so exec approval resolution (`/approve`, yes/no) is not blocked by empty `GatewayClientScopes`.
 - Exec approvals: natural-language replies (for example ok, go ahead, yes please, cancel) resolve pending dangerous/exec approvals; when the pending request is tied to a different session (such as a subagent), yes/no now falls back to the latest pending approval for the same agent id.
 - LINE/ACP: add current-conversation binding and inbound binding-routing parity so `/acp spawn ... --thread here`, configured ACP bindings, and active conversation-bound ACP sessions work on LINE like the other conversation channels.

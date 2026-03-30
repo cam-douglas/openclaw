@@ -12,7 +12,14 @@ import process from "node:process";
 import dotenv from "dotenv";
 import { resolveStateDir } from "../config/paths.js";
 import { loadWorkspaceDotEnvFile } from "../infra/dotenv.js";
+import {
+  DEFAULT_OPENCLAW_COMPLETION_SOUND_PATH,
+  playMacCompletionChime,
+} from "../infra/mac-completion-chime.js";
 import { buildDropletSshClientOptions } from "./droplet-ssh-options.js";
+
+/** Re-export for compatibility; same path as `DEFAULT_OPENCLAW_COMPLETION_SOUND_PATH`. */
+export const DEFAULT_DROPLET_COMPLETION_SOUND_PATH = DEFAULT_OPENCLAW_COMPLETION_SOUND_PATH;
 
 /** Refresh sudo timestamp for droplet helpers; skip with OPENCLAW_DROPLET_SUDO_GATE=0. */
 export function refreshDropletLocalSudoGate(): void {
@@ -36,38 +43,8 @@ export function revokeDropletLocalSudoGate(): void {
   spawnSync("sudo", ["-k"], { stdio: "ignore" });
 }
 
-/** Default macOS system sound for `openclaw … droplet` completion (Funk). */
-export const DEFAULT_DROPLET_COMPLETION_SOUND_PATH = "/System/Library/Sounds/Funk.aiff";
-
-/**
- * Play a local completion chime after the remote `openclaw … droplet` SSH session ends.
- * macOS only (`afplay`). Disabled with `OPENCLAW_DROPLET_COMPLETION_SOUND=0`.
- * Optional: `OPENCLAW_DROPLET_COMPLETION_SOUND_PATH`, `OPENCLAW_DROPLET_COMPLETION_SOUND_SUCCESS_ONLY=1`.
- */
-export function playDropletRemoteCompletionChime(sshExitStatus: number | null): void {
-  if (process.env.OPENCLAW_DROPLET_COMPLETION_SOUND?.trim() === "0") {
-    return;
-  }
-  if (process.platform !== "darwin") {
-    return;
-  }
-  if (process.env.OPENCLAW_DROPLET_COMPLETION_SOUND_SUCCESS_ONLY?.trim() === "1") {
-    if (sshExitStatus !== 0) {
-      return;
-    }
-  }
-  const soundPath =
-    process.env.OPENCLAW_DROPLET_COMPLETION_SOUND_PATH?.trim() ||
-    DEFAULT_DROPLET_COMPLETION_SOUND_PATH;
-  if (!soundPath) {
-    return;
-  }
-  try {
-    spawnSync("afplay", [soundPath], { stdio: "ignore" });
-  } catch {
-    // Missing afplay or unreadable path: ignore.
-  }
-}
+/** Alias for `playMacCompletionChime` (see `src/infra/mac-completion-chime.ts`). */
+export const playDropletRemoteCompletionChime = playMacCompletionChime;
 
 /**
  * Global npm installs may not yet include `~/openclaw/.env` in the main CLI dotenv pass.
@@ -148,6 +125,15 @@ export function stripTrailingDroplet(argv: string[]): { ok: boolean; argv: strin
     return { ok: false, argv };
   }
   return { ok: true, argv: argv.slice(0, -1) };
+}
+
+/**
+ * True when `tryHandleDropletRemoteCli` will take this invocation (argv ends with `droplet`).
+ * Used to avoid stacking `OPENCLAW_REQUIRE_LOCAL_SUDO` (sudo -v then sudo -k) with the droplet
+ * helper's own `sudo -v` before SSH, which would otherwise prompt twice.
+ */
+export function isTrailingDropletRemoteInvocation(argv: string[]): boolean {
+  return stripTrailingDroplet(argv).ok;
 }
 
 /**
@@ -368,7 +354,7 @@ export function tryHandleDropletRemoteCli(argv: string[]): boolean {
   const ssh = spawnSync("ssh", ["-t", ...sshOpts, target, sshRemoteArgv], { stdio: "inherit" });
 
   if (!ssh.error) {
-    playDropletRemoteCompletionChime(ssh.status ?? null);
+    playMacCompletionChime(ssh.status ?? null);
   }
 
   revokeDropletLocalSudoGate();

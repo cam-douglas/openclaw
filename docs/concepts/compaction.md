@@ -64,7 +64,8 @@ You’ll see:
 - `/status` showing `🧹 Compactions: <count>`
 
 Before compaction, OpenClaw can run a **silent memory flush** turn to store
-durable notes to disk. See [Memory](/concepts/memory) for details and config.
+durable notes to disk (a dedicated handover step so important state can be written
+before the summarization pass). See [Memory](/concepts/memory) for details and config.
 
 ## Manual compaction
 
@@ -77,6 +78,16 @@ Use `/compact` (optionally with instructions) to force a compaction pass:
 ## Context window source
 
 Context window is model-specific. OpenClaw uses the model definition from the configured provider catalog to determine limits.
+
+For **Anthropic Claude** models, the API **context window** is **200,000 tokens** for current Sonnet/Opus-class models unless you have enabled a larger context tier (see Anthropic model and pricing documentation). OpenClaw falls back to **200,000** tokens when the catalog entry does not specify `contextWindow`.
+
+**Important:** the per-response **max output tokens** (`maxTokens` on the model) is **not** the context window. OpenClaw must not use output limits when estimating how full the session is; otherwise a typical ~16k output cap would make a healthy session look like **>200%** usage and trigger compaction far too early.
+
+If you set `agents.defaults.contextTokens` in `openclaw.json`, it **caps** the budget when the value is **lower** than the model’s catalog window (it does not raise the limit above the catalog).
+
+## Tool-result headroom (default 95%)
+
+Preemptive **tool-result** compaction (replacing older tool output with placeholders) runs when estimated context exceeds **~95%** of the resolved window. Tune with `agents.defaults.compaction.toolResultContextHeadroomRatio` (range `0.5`–`0.95`; default **`0.95`**). After tool outputs are compacted, if estimated context still exceeds **~98%** of the resolved window (non-tool content dominates), the run throws into the overflow recovery path so **session** compaction (LLM summary / handover) can run.
 
 ## Compaction vs pruning
 

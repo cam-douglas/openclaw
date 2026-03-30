@@ -6,6 +6,7 @@ import { defaultRuntime, type RuntimeEnv } from "openclaw/plugin-sdk/runtime-env
 import { logInfo } from "openclaw/plugin-sdk/text-runtime";
 import { resolveWhatsAppAccount } from "./accounts.js";
 import { renderQrPngBase64 } from "./qr-image.js";
+import { writeWhatsAppQrDataUrlToTempFile } from "./qr-temp-file.js";
 import {
   createWaSocket,
   formatError,
@@ -117,7 +118,7 @@ export async function startWebLoginWithQr(
     accountId?: string;
     runtime?: RuntimeEnv;
   } = {},
-): Promise<{ qrDataUrl?: string; message: string }> {
+): Promise<{ qrDataUrl?: string; qrPngPath?: string; message: string }> {
   const runtime = opts.runtime ?? defaultRuntime;
   const cfg = loadConfig();
   const account = resolveWhatsAppAccount({ cfg, accountId: opts.accountId });
@@ -132,8 +133,14 @@ export async function startWebLoginWithQr(
 
   const existing = activeLogins.get(account.accountId);
   if (existing && isLoginFresh(existing) && existing.qrDataUrl) {
+    const qrPngPath =
+      (await writeWhatsAppQrDataUrlToTempFile(existing.qrDataUrl, account.accountId)) ?? undefined;
+    if (qrPngPath) {
+      runtime.log(info(`WhatsApp QR PNG (gateway): ${qrPngPath}`));
+    }
     return {
       qrDataUrl: existing.qrDataUrl,
+      ...(qrPngPath ? { qrPngPath } : {}),
       message: "QR already active. Scan it in WhatsApp → Linked Devices.",
     };
   }
@@ -211,8 +218,14 @@ export async function startWebLoginWithQr(
 
   const base64 = await renderQrPngBase64(qr);
   login.qrDataUrl = `data:image/png;base64,${base64}`;
+  const qrPngPath =
+    (await writeWhatsAppQrDataUrlToTempFile(login.qrDataUrl, account.accountId)) ?? undefined;
+  if (qrPngPath) {
+    runtime.log(info(`WhatsApp QR PNG (gateway): ${qrPngPath}`));
+  }
   return {
     qrDataUrl: login.qrDataUrl,
+    ...(qrPngPath ? { qrPngPath } : {}),
     message: "Scan this QR in WhatsApp → Linked Devices.",
   };
 }

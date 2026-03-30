@@ -12,13 +12,14 @@ import {
   isToolResultMessage,
 } from "./tool-result-char-estimator.js";
 
-/** Default ratio of context window used as estimated total char budget (was 0.75; raised to reduce spurious compaction). */
-const DEFAULT_CONTEXT_INPUT_HEADROOM_RATIO = 0.82;
+/** Default ratio of context window used as estimated total char budget before preemptive tool-result compaction. */
+const DEFAULT_CONTEXT_INPUT_HEADROOM_RATIO = 0.95;
 /** Default max share of context window per single tool result (was 0.5). */
 const DEFAULT_SINGLE_TOOL_RESULT_CONTEXT_SHARE = 0.62;
-// High-water mark: if context exceeds this ratio after tool-result compaction,
-// trigger full session compaction via the existing overflow recovery cascade.
-const PREEMPTIVE_OVERFLOW_RATIO = 0.9;
+// High-water mark after tool-result compaction: must be **strictly above** `headroomRatio`
+// so non-tool content can exceed the tool budget (e.g. 95% char budget) and still trigger
+// full session compaction without equaling the same threshold as the tool budget.
+const PREEMPTIVE_OVERFLOW_RATIO = 0.98;
 
 /** Do not replace the last N tool outputs with the placeholder until older tool results are compacted. */
 const DEFAULT_PRESERVE_RECENT_TOOL_RESULTS = 4;

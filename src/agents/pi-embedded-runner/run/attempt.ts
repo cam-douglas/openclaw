@@ -50,6 +50,7 @@ import {
   listChannelSupportedActions,
   resolveChannelMessageToolHints,
 } from "../../channel-tools.js";
+import { resolveContextWindowInfo } from "../../context-window-guard.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../defaults.js";
 import { resolveOpenClawDocsPath } from "../../docs-path.js";
 import { isTimeoutError } from "../../failover-error.js";
@@ -849,14 +850,19 @@ export async function runEmbeddedAttempt(
       queueYieldInterruptForSession = () => {
         queueSessionsYieldInterruptMessage(activeSession);
       };
+      const toolGuardContextTokens = resolveContextWindowInfo({
+        cfg: params.config,
+        provider: params.provider,
+        modelId: params.modelId,
+        modelContextWindow: params.model.contextWindow,
+        defaultTokens: DEFAULT_CONTEXT_TOKENS,
+      }).tokens;
+      // Never use model.maxTokens here — it is the per-response output cap (often ~16k), not the
+      // context window. Using it made usage look >200% and compacted far too early vs Claude's
+      // ~200k API context (see Anthropic model docs).
       removeToolResultContextGuard = installToolResultContextGuard({
         agent: activeSession.agent,
-        contextWindowTokens: Math.max(
-          1,
-          Math.floor(
-            params.model.contextWindow ?? params.model.maxTokens ?? DEFAULT_CONTEXT_TOKENS,
-          ),
-        ),
+        contextWindowTokens: Math.max(1, Math.floor(toolGuardContextTokens)),
         guardConfig: resolveToolResultContextGuardConfig(params.config),
       });
       const cacheTrace = createCacheTrace({

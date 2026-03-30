@@ -47,6 +47,10 @@ vi.mock("./qr-image.js", () => ({
   renderQrPngBase64: vi.fn(async () => "base64"),
 }));
 
+vi.mock("./qr-temp-file.js", () => ({
+  writeWhatsAppQrDataUrlToTempFile: vi.fn(async () => "/tmp/openclaw-whatsapp-qr-test.png"),
+}));
+
 const createWaSocketMock = vi.mocked(createWaSocket);
 const waitForWaConnectionMock = vi.mocked(waitForWaConnection);
 const waitForCredsSaveQueueWithTimeoutMock = vi.mocked(waitForCredsSaveQueueWithTimeout);
@@ -75,6 +79,7 @@ describe("login-qr", () => {
 
     const start = await startWebLoginWithQr({ timeoutMs: 5000 });
     expect(start.qrDataUrl).toBe("data:image/png;base64,base64");
+    expect(start.qrPngPath).toBe("/tmp/openclaw-whatsapp-qr-test.png");
 
     const resultPromise = waitForWebLogin({ timeoutMs: 5000 });
     await flushTasks();

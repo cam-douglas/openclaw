@@ -1,3 +1,4 @@
+import { playMacCompletionChime } from "../infra/mac-completion-chime.js";
 import { parseAgentSessionKey } from "../sessions/session-key-utils.js";
 import { asString, extractTextFromMessage, isCommandMessage } from "./tui-formatters.js";
 import { TuiStreamAssembler } from "./tui-stream-assembler.js";
@@ -139,6 +140,7 @@ export function createEventHandlers(context: EventHandlerContext) {
     flushPendingHistoryRefreshIfIdle();
     if (params.wasActiveRun) {
       setActivityStatus(params.status);
+      playMacCompletionChime(params.status === "idle" ? 0 : 1, { tui: true });
     }
     void refreshSessionInfo?.();
   };
@@ -154,6 +156,9 @@ export function createEventHandlers(context: EventHandlerContext) {
     flushPendingHistoryRefreshIfIdle();
     if (params.wasActiveRun) {
       setActivityStatus(params.status);
+      if (params.status === "error") {
+        playMacCompletionChime(1, { tui: true });
+      }
     }
     void refreshSessionInfo?.();
   };

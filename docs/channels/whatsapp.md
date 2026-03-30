@@ -68,6 +68,8 @@ openclaw channels login --channel whatsapp
 openclaw channels login --channel whatsapp --account work
 ```
 
+    On the machine running the gateway, login also writes **`openclaw-whatsapp-qr-<account>.png`** under the OpenClaw temp directory (see `OPENCLAW_TMP` / `TMPDIR`). Use that file if the terminal QR is hard to scan over SSH or web chat. The owner **`whatsapp_login`** tool returns a real image attachment plus the same path.
+
   </Step>
 
   <Step title="Start the gateway">
