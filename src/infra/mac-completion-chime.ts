@@ -1,5 +1,8 @@
 /**
- * macOS completion chime (`afplay`) for local UX: `openclaw … droplet` (SSH) and TUI run completion.
+ * macOS completion chime (`afplay`) for local UX: `openclaw … droplet` (non-TUI SSH) and **local**
+ * `openclaw tui` when a chat run finalizes. Trailing `droplet` with remote `tui` skips SSH-exit
+ * chime by default (see `OPENCLAW_DROPLET_SSH_EXIT_CHIME` in `.env.example`); use local TUI pointed
+ * at the gateway for a sound when each agent reply completes.
  * The droplet/VPS never invokes the Mac; only local processes call this.
  *
  * Default system effect is **Funk** (`Funk.aiff` under `/System/Library/Sounds/`). In System Settings

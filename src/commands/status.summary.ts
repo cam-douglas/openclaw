@@ -1,3 +1,4 @@
+import { resolveSessionPersistedContextTokensForDisplay } from "../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { hasPotentialConfiguredChannels } from "../channels/config-presence.js";
 import { resolveMainSessionKey } from "../config/sessions/main-session.js";
@@ -177,12 +178,23 @@ export async function getStatusSummary(
         const age = updatedAt ? now - updatedAt : null;
         const resolvedModel = resolveSessionModelRef(cfg, entry, opts.agentIdOverride);
         const model = resolvedModel.model ?? configModel ?? null;
+        const sessionCtxOverride = resolveSessionPersistedContextTokensForDisplay({
+          persisted:
+            typeof entry?.contextTokens === "number" && entry.contextTokens > 0
+              ? entry.contextTokens
+              : undefined,
+          cfg,
+          provider: resolvedModel.provider,
+          model,
+          fallbackContextTokens: configContextTokens ?? undefined,
+          allowAsyncLoad: false,
+        });
         const contextTokens =
           resolveContextTokensForModel({
             cfg,
             provider: resolvedModel.provider,
             model,
-            contextTokensOverride: entry?.contextTokens,
+            contextTokensOverride: sessionCtxOverride,
             fallbackContextTokens: configContextTokens ?? undefined,
             allowAsyncLoad: false,
           }) ?? null;

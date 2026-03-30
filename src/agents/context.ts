@@ -458,3 +458,60 @@ export function resolveContextTokensForModel(params: {
 
   return params.fallbackContextTokens;
 }
+
+/**
+ * Common per-response output caps that older builds sometimes persisted as
+ * `session.contextTokens` when confusing `maxTokens` with the context window.
+ */
+const STALE_SESSION_CONTEXT_MARKERS = new Set([4096, 8192, 12_288, 16_384, 32_768, 65_536]);
+
+/**
+ * Returns true when `persisted` looks like an output-token cap stored as the
+ * session context limit while the resolved model window is much larger.
+ */
+export function isLikelyStaleOutputCapPersistedAsSessionContext(
+  persisted: number,
+  resolvedModelWindow: number | undefined,
+): boolean {
+  if (resolvedModelWindow === undefined || resolvedModelWindow <= 0) {
+    return false;
+  }
+  if (persisted > resolvedModelWindow) {
+    return false;
+  }
+  if (!STALE_SESSION_CONTEXT_MARKERS.has(persisted)) {
+    return false;
+  }
+  return resolvedModelWindow >= persisted * 4;
+}
+
+/**
+ * Session store `contextTokens` should not override model-derived limits when
+ * the value is almost certainly a stale max-output snapshot (see
+ * `isLikelyStaleOutputCapPersistedAsSessionContext`). Returns `undefined` when
+ * the persisted value should be ignored for display and limit math.
+ */
+export function resolveSessionPersistedContextTokensForDisplay(params: {
+  persisted?: number;
+  cfg?: OpenClawConfig;
+  provider?: string;
+  model?: string;
+  fallbackContextTokens?: number;
+  allowAsyncLoad?: boolean;
+}): number | undefined {
+  const p = params.persisted;
+  if (typeof p !== "number" || p <= 0) {
+    return undefined;
+  }
+  const resolved = resolveContextTokensForModel({
+    cfg: params.cfg,
+    provider: params.provider,
+    model: params.model,
+    fallbackContextTokens: params.fallbackContextTokens,
+    allowAsyncLoad: params.allowAsyncLoad,
+  });
+  if (isLikelyStaleOutputCapPersistedAsSessionContext(p, resolved)) {
+    return undefined;
+  }
+  return p;
+}

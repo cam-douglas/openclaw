@@ -278,16 +278,15 @@ describe("lookupContextTokens", () => {
   });
 
   it("resolveContextTokensForModel prefers exact provider key over alias-normalized match", async () => {
-    // When both "bedrock" and "amazon-bedrock" exist as config keys (alias pattern),
-    // resolveConfiguredProviderContextWindow must return the exact-key match first,
-    // not the first normalized hit — mirroring pi-embedded-runner/model.ts behaviour.
+    // `bedrock` normalizes to `amazon-bedrock` in provider-id.ts, so use distinct
+    // vendor keys that do not collapse under normalization.
     mockDiscoveryDeps([]);
 
     const cfg = {
       models: {
         providers: {
-          "amazon-bedrock": { models: [{ id: "claude-alias-test", contextWindow: 32_000 }] },
-          bedrock: { models: [{ id: "claude-alias-test", contextWindow: 128_000 }] },
+          "vendor-canonical": { models: [{ id: "model-x", contextWindow: 32_000 }] },
+          vendor: { models: [{ id: "model-x", contextWindow: 128_000 }] },
         },
       },
     };
@@ -295,19 +294,17 @@ describe("lookupContextTokens", () => {
     const { resolveContextTokensForModel } = await import("./context.js");
     await flushAsyncWarmup();
 
-    // Exact key "bedrock" wins over the alias-normalized match "amazon-bedrock".
-    const bedrockResult = resolveContextTokensForModel({
+    const shortKeyResult = resolveContextTokensForModel({
       cfg: cfg as never,
-      provider: "bedrock",
-      model: "claude-alias-test",
+      provider: "vendor",
+      model: "model-x",
     });
-    expect(bedrockResult).toBe(128_000);
+    expect(shortKeyResult).toBe(128_000);
 
-    // Exact key "amazon-bedrock" wins (no alias lookup needed).
     const canonicalResult = resolveContextTokensForModel({
       cfg: cfg as never,
-      provider: "amazon-bedrock",
-      model: "claude-alias-test",
+      provider: "vendor-canonical",
+      model: "model-x",
     });
     expect(canonicalResult).toBe(32_000);
   });
@@ -380,5 +377,63 @@ describe("lookupContextTokens", () => {
       model: "glm-5",
     });
     expect(result).toBe(256_000);
+  });
+});
+
+describe("resolveSessionPersistedContextTokensForDisplay", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(async () => {
+    try {
+      const { resetContextWindowCacheForTest } = await import("./context.js");
+      resetContextWindowCacheForTest();
+    } catch {
+      // Ignore reset failures when a test aborts before the module loads.
+    }
+    await flushAsyncWarmup();
+  });
+
+  it("treats persisted 16k-class caps as stale when the resolved model window is much larger", async () => {
+    const cfg = createContextOverrideConfig("anthropic", "claude-stale-cap-test", 200_000);
+    mockDiscoveryDeps([]);
+    const { resolveSessionPersistedContextTokensForDisplay, resolveContextTokensForModel } =
+      await import("./context.js");
+    await flushAsyncWarmup();
+
+    expect(
+      resolveSessionPersistedContextTokensForDisplay({
+        persisted: 16_384,
+        cfg: cfg as never,
+        provider: "anthropic",
+        model: "claude-stale-cap-test",
+      }),
+    ).toBeUndefined();
+
+    expect(
+      resolveContextTokensForModel({
+        cfg: cfg as never,
+        provider: "anthropic",
+        model: "claude-stale-cap-test",
+        contextTokensOverride: undefined,
+      }),
+    ).toBe(200_000);
+  });
+
+  it("keeps persisted limits that are not typical output-cap markers", async () => {
+    const cfg = createContextOverrideConfig("anthropic", "claude-stale-cap-test-b", 200_000);
+    mockDiscoveryDeps([]);
+    const { resolveSessionPersistedContextTokensForDisplay } = await import("./context.js");
+    await flushAsyncWarmup();
+
+    expect(
+      resolveSessionPersistedContextTokensForDisplay({
+        persisted: 50_000,
+        cfg: cfg as never,
+        provider: "anthropic",
+        model: "claude-stale-cap-test-b",
+      }),
+    ).toBe(50_000);
   });
 });

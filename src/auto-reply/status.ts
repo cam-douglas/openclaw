@@ -1,5 +1,8 @@
 import fs from "node:fs";
-import { resolveContextTokensForModel } from "../agents/context.js";
+import {
+  resolveContextTokensForModel,
+  resolveSessionPersistedContextTokensForDisplay,
+} from "../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import { resolveModelAuthMode } from "../agents/model-auth.js";
 import {
@@ -546,10 +549,17 @@ export function buildStatusMessage(args: StatusArgs): string {
     model: contextLookupModel,
     allowAsyncLoad: false,
   });
-  const persistedContextTokens =
-    typeof entry?.contextTokens === "number" && entry.contextTokens > 0
-      ? entry.contextTokens
-      : undefined;
+  const persistedContextTokens = resolveSessionPersistedContextTokensForDisplay({
+    persisted:
+      typeof entry?.contextTokens === "number" && entry.contextTokens > 0
+        ? entry.contextTokens
+        : undefined,
+    cfg: contextConfig,
+    provider: contextLookupProvider,
+    model: contextLookupModel,
+    fallbackContextTokens: DEFAULT_CONTEXT_TOKENS,
+    allowAsyncLoad: false,
+  });
   const explicitRuntimeContextTokens =
     typeof args.runtimeContextTokens === "number" && args.runtimeContextTokens > 0
       ? args.runtimeContextTokens

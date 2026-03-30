@@ -353,7 +353,25 @@ export function tryHandleDropletRemoteCli(argv: string[]): boolean {
   // Non-login, no-rc, clean env: avoids noisy /root/.profile, `BASH_ENV`, and inherited env dumps.
   const ssh = spawnSync("ssh", ["-t", ...sshOpts, target, sshRemoteArgv], { stdio: "inherit" });
 
-  if (!ssh.error) {
+  const shouldPlaySshExitChime = (() => {
+    const override = process.env.OPENCLAW_DROPLET_SSH_EXIT_CHIME?.trim();
+    if (override === "1") {
+      return true;
+    }
+    if (override === "0") {
+      return false;
+    }
+    // Remote `openclaw tui` keeps SSH open until you quit; playing only on SSH
+    // exit is not "when the agent finished" — use local `openclaw tui` (same
+    // gateway URL/token) for per-reply chime, or set OPENCLAW_DROPLET_SSH_EXIT_CHIME=1
+    // to keep the old behavior.
+    if (forward[0] === "tui") {
+      return false;
+    }
+    return true;
+  })();
+
+  if (!ssh.error && shouldPlaySshExitChime) {
     playMacCompletionChime(ssh.status ?? null);
   }
 

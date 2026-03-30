@@ -1,8 +1,12 @@
-import { lookupContextTokens } from "../agents/context.js";
+import {
+  lookupContextTokens,
+  resolveContextTokensForModel,
+  resolveSessionPersistedContextTokensForDisplay,
+} from "../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../agents/defaults.js";
 import { loadConfig } from "../config/config.js";
 import { loadSessionStore, resolveFreshSessionTotalTokens } from "../config/sessions.js";
-import { classifySessionKey } from "../gateway/session-utils.js";
+import { classifySessionKey, resolveSessionModelRef } from "../gateway/session-utils.js";
 import { info } from "../globals.js";
 import { parseAgentSessionKey } from "../routing/session-key.js";
 import { type RuntimeEnv, writeRuntimeJson } from "../runtime.js";
@@ -155,13 +159,31 @@ export async function sessionsCommand(
       activeMinutes: activeMinutes ?? null,
       sessions: rows.map((r) => {
         const model = resolveSessionDisplayModel(cfg, r, displayDefaults);
+        const resolvedRef = resolveSessionModelRef(cfg, r, parseAgentSessionKey(r.key)?.agentId);
+        const contextTokensResolved =
+          resolveContextTokensForModel({
+            cfg,
+            provider: resolvedRef.provider,
+            model: resolvedRef.model,
+            contextTokensOverride: resolveSessionPersistedContextTokensForDisplay({
+              persisted: typeof r.contextTokens === "number" ? r.contextTokens : undefined,
+              cfg,
+              provider: resolvedRef.provider,
+              model: resolvedRef.model,
+              fallbackContextTokens: configContextTokens,
+              allowAsyncLoad: false,
+            }),
+            fallbackContextTokens: configContextTokens,
+            allowAsyncLoad: false,
+          }) ??
+          configContextTokens ??
+          null;
         return {
           ...r,
           totalTokens: resolveFreshSessionTotalTokens(r) ?? null,
           totalTokensFresh:
             typeof r.totalTokens === "number" ? r.totalTokensFresh !== false : false,
-          contextTokens:
-            r.contextTokens ?? lookupContextTokens(model) ?? configContextTokens ?? null,
+          contextTokens: contextTokensResolved,
           model,
         };
       }),
@@ -201,7 +223,23 @@ export async function sessionsCommand(
 
   for (const row of rows) {
     const model = resolveSessionDisplayModel(cfg, row, displayDefaults);
-    const contextTokens = row.contextTokens ?? lookupContextTokens(model) ?? configContextTokens;
+    const resolvedRef = resolveSessionModelRef(cfg, row, parseAgentSessionKey(row.key)?.agentId);
+    const contextTokens =
+      resolveContextTokensForModel({
+        cfg,
+        provider: resolvedRef.provider,
+        model: resolvedRef.model,
+        contextTokensOverride: resolveSessionPersistedContextTokensForDisplay({
+          persisted: typeof row.contextTokens === "number" ? row.contextTokens : undefined,
+          cfg,
+          provider: resolvedRef.provider,
+          model: resolvedRef.model,
+          fallbackContextTokens: configContextTokens,
+          allowAsyncLoad: false,
+        }),
+        fallbackContextTokens: configContextTokens,
+        allowAsyncLoad: false,
+      }) ?? configContextTokens;
     const total = resolveFreshSessionTotalTokens(row);
 
     const line = [
