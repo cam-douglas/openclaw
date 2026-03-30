@@ -558,8 +558,10 @@ export function isLikelyStaleOutputCapPersistedAsSessionContext(
   persisted: number,
   resolvedModelWindow: number | undefined,
 ): boolean {
+  // When we cannot resolve a real catalog window (cold cache, odd model id), a persisted
+  // 16k/32k/64k-class value is still almost certainly a max-output cap, not context.
   if (resolvedModelWindow === undefined || resolvedModelWindow <= 0) {
-    return false;
+    return persisted === 16_384 || persisted === 32_768 || persisted === 65_536;
   }
   if (persisted > resolvedModelWindow) {
     return false;

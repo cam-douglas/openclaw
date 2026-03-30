@@ -3,6 +3,7 @@ import {
   ANTHROPIC_CONTEXT_1M_TOKENS,
   applyConfiguredContextWindows,
   applyDiscoveredContextWindows,
+  isLikelyStaleOutputCapPersistedAsSessionContext,
   resolveContextTokensForModel,
 } from "./context.js";
 import { createSessionManagerRuntimeRegistry } from "./pi-extensions/session-manager-runtime-registry.js";
@@ -191,6 +192,13 @@ describe("resolveContextTokensForModel", () => {
     });
 
     expect(result).toBe(200_000);
+  });
+
+  it("treats 16k-class persisted caps as stale when catalog window cannot be resolved", () => {
+    expect(isLikelyStaleOutputCapPersistedAsSessionContext(16_384, undefined)).toBe(true);
+    expect(isLikelyStaleOutputCapPersistedAsSessionContext(32_768, undefined)).toBe(true);
+    expect(isLikelyStaleOutputCapPersistedAsSessionContext(65_536, undefined)).toBe(true);
+    expect(isLikelyStaleOutputCapPersistedAsSessionContext(8192, undefined)).toBe(false);
   });
 
   it("returns 1M context for claude-cli when context1m is enabled on the CLI model key", () => {

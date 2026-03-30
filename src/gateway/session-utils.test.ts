@@ -2030,9 +2030,10 @@ describe("listSessionsFromStore subagent metadata", () => {
                 requesterDisplayKey: "main",
                 task: "finished too early",
                 cleanup: "keep",
-                createdAt: now - 2_000,
-                startedAt: now - 1_900,
-                endedAt: now - 1_800,
+                // Older than run-live so getLatestSubagentRunByChildSessionKey prefers the active run.
+                createdAt: now - 20_000,
+                startedAt: now - 19_900,
+                endedAt: now - 19_800,
                 outcome: { status: "ok" },
               },
               "run-live": {
