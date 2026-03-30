@@ -1061,7 +1061,7 @@ export const FIELD_HELP: Record<string, string> = {
   "agents.defaults.compaction.identifierInstructions":
     'Custom identifier-preservation instruction text used when identifierPolicy="custom". Keep this explicit and safety-focused so compaction summaries do not rewrite opaque IDs, URLs, hosts, or ports.',
   "agents.defaults.compaction.recentTurnsPreserve":
-    "Number of most recent user/assistant turns kept verbatim outside safeguard summarization (default: 3). Raise this to preserve exact recent dialogue context, or lower it to maximize compaction savings.",
+    "Number of most recent user/assistant turns kept verbatim outside safeguard summarization (default: 8). Raise this to preserve exact recent dialogue context, or lower it to maximize compaction savings.",
   "agents.defaults.compaction.qualityGuard":
     "Optional quality-audit retry settings for safeguard compaction summaries. Leave this disabled unless you explicitly want summary audits and one-shot regeneration on failed checks.",
   "agents.defaults.compaction.qualityGuard.enabled":
@@ -1079,11 +1079,11 @@ export const FIELD_HELP: Record<string, string> = {
   "agents.defaults.compaction.truncateAfterCompaction":
     "When enabled, rewrites the session JSONL file after compaction to remove entries that were summarized. Prevents unbounded file growth in long-running sessions with many compaction cycles. Default: false.",
   "agents.defaults.compaction.toolResultContextHeadroomRatio":
-    "Fraction of the estimated context char budget used before preemptive tool-result compaction (default ~0.95). Lower values compact sooner; higher values keep more tool output visible but risk hitting model limits.",
+    "Fraction of the estimated context char budget used before preemptive tool-result compaction (default ~0.78). Lower values compact sooner; higher values keep more tool output visible but risk hitting model limits.",
   "agents.defaults.compaction.toolResultMaxSingleShare":
-    "Maximum fraction of the context budget a single tool result may occupy before truncation or placeholder replacement (default ~0.62). Raise for large single-shot reads; lower to force earlier trimming.",
+    "Maximum fraction of the context budget a single tool result may occupy before truncation or placeholder replacement (default ~0.35). Raise for large single-shot reads; lower to force earlier trimming.",
   "agents.defaults.compaction.toolResultPreserveRecent":
-    "Number of most recent tool results kept intact before older tool outputs are replaced with the compaction placeholder (default: 4). Set to 0 to match legacy oldest-first compaction across all tool results.",
+    "Number of most recent tool results kept intact before older tool outputs are replaced with the compaction placeholder (default: 3). Set to 0 to match legacy oldest-first compaction across all tool results.",
   "agents.defaults.compaction.memoryFlush":
     "Pre-compaction memory flush settings that run an agentic memory write before heavy compaction. Keep enabled for long sessions so salient context is persisted before aggressive trimming.",
   "agents.defaults.compaction.memoryFlush.enabled":

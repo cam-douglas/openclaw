@@ -1,4 +1,9 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
+import {
+  DEFAULT_TOOL_RESULT_CONTEXT_HEADROOM_RATIO,
+  DEFAULT_TOOL_RESULT_MAX_SINGLE_SHARE,
+  DEFAULT_TOOL_RESULT_PRESERVE_RECENT,
+} from "../../config/compaction-defaults.js";
 import type { AgentCompactionConfig } from "../../config/types.agent-defaults.js";
 import {
   CHARS_PER_TOKEN_ESTIMATE,
@@ -12,17 +17,9 @@ import {
   isToolResultMessage,
 } from "./tool-result-char-estimator.js";
 
-/** Default ratio of context window used as estimated total char budget before preemptive tool-result compaction. */
-const DEFAULT_CONTEXT_INPUT_HEADROOM_RATIO = 0.95;
-/** Default max share of context window per single tool result (was 0.5). */
-const DEFAULT_SINGLE_TOOL_RESULT_CONTEXT_SHARE = 0.62;
 // High-water mark after tool-result compaction: must be **strictly above** `headroomRatio`
-// so non-tool content can exceed the tool budget (e.g. 95% char budget) and still trigger
-// full session compaction without equaling the same threshold as the tool budget.
+// so non-tool content can exceed the tool budget and still trigger full session compaction.
 const PREEMPTIVE_OVERFLOW_RATIO = 0.98;
-
-/** Do not replace the last N tool outputs with the placeholder until older tool results are compacted. */
-const DEFAULT_PRESERVE_RECENT_TOOL_RESULTS = 4;
 
 export const CONTEXT_LIMIT_TRUNCATION_NOTICE = "[truncated: output exceeded context limit]";
 const CONTEXT_LIMIT_TRUNCATION_SUFFIX = `\n${CONTEXT_LIMIT_TRUNCATION_NOTICE}`;
@@ -51,15 +48,15 @@ export function resolveToolResultContextGuardConfig(
     preserveRecentToolResults:
       typeof c?.toolResultPreserveRecent === "number"
         ? clamp(Math.floor(c.toolResultPreserveRecent), 0, 32)
-        : DEFAULT_PRESERVE_RECENT_TOOL_RESULTS,
+        : DEFAULT_TOOL_RESULT_PRESERVE_RECENT,
     headroomRatio:
       typeof c?.toolResultContextHeadroomRatio === "number"
         ? clamp(c.toolResultContextHeadroomRatio, 0.5, 0.95)
-        : DEFAULT_CONTEXT_INPUT_HEADROOM_RATIO,
+        : DEFAULT_TOOL_RESULT_CONTEXT_HEADROOM_RATIO,
     singleResultShare:
       typeof c?.toolResultMaxSingleShare === "number"
         ? clamp(c.toolResultMaxSingleShare, 0.25, 0.9)
-        : DEFAULT_SINGLE_TOOL_RESULT_CONTEXT_SHARE,
+        : DEFAULT_TOOL_RESULT_MAX_SINGLE_SHARE,
   };
 }
 

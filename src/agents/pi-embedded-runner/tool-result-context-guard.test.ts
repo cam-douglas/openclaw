@@ -150,8 +150,11 @@ describe("installToolResultContextGuard", () => {
     });
 
     const contextForNextCall: AgentMessage[] = [makeUser("stress")];
+    // Stay under per-tool max (~70k chars at default 0.35 single-result share) so the newest
+    // result stays intact without the hard truncation suffix.
+    const toolBodyChars = 65_000;
     for (let i = 1; i <= 4; i++) {
-      contextForNextCall.push(makeToolResult(`call_${i}`, String(i).repeat(95_000)));
+      contextForNextCall.push(makeToolResult(`call_${i}`, String(i).repeat(toolBodyChars)));
       await agent.transformContext?.(contextForNextCall, new AbortController().signal);
     }
 
@@ -160,7 +163,7 @@ describe("installToolResultContextGuard", () => {
       .map((msg) => getToolResultText(msg as AgentMessage));
 
     expect(toolResultTexts[0]).toBe(PREEMPTIVE_TOOL_RESULT_COMPACTION_PLACEHOLDER);
-    expect(toolResultTexts[3]?.length).toBe(95_000);
+    expect(toolResultTexts[3]?.length).toBe(toolBodyChars);
     expect(toolResultTexts.join("\n")).not.toContain(CONTEXT_LIMIT_TRUNCATION_NOTICE);
   });
 
@@ -277,7 +280,7 @@ describe("installToolResultContextGuard", () => {
 
     installToolResultContextGuard({
       agent,
-      // contextBudgetChars ≈ 1000 * 4 * 0.95 = 3800
+      // contextBudgetChars ≈ 1000 * 4 * 0.78 = 3120 (default headroom)
       // preemptiveOverflowChars ≈ 1000 * 4 * 0.98 = 3920
       contextWindowTokens: 1_000,
     });

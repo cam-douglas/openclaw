@@ -314,7 +314,7 @@ export type AgentCompactionConfig = {
   keepRecentTokens?: number;
   /** Minimum reserve tokens enforced for Pi compaction (0 disables the floor). */
   reserveTokensFloor?: number;
-  /** Max share of context window for history during safeguard pruning (0.1–0.9, default 0.5). */
+  /** Max share of context window for history during safeguard pruning (0.1–0.9, default 0.15 when unset). */
   maxHistoryShare?: number;
   /** Additional compaction-summary instructions that can preserve language or persona continuity. */
   customInstructions?: string;

@@ -3,6 +3,10 @@ import path from "node:path";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { ExtensionAPI, ExtensionContext, FileOperations } from "@mariozechner/pi-coding-agent";
 import { extractSections } from "../../auto-reply/reply/post-compaction-context.js";
+import {
+  DEFAULT_COMPACTION_MAX_HISTORY_SHARE,
+  DEFAULT_COMPACTION_RECENT_TURNS_PRESERVE,
+} from "../../config/compaction-defaults.js";
 import { openBoundaryFile } from "../../infra/boundary-file-read.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import {
@@ -54,7 +58,6 @@ const MAX_COMPACTION_SUMMARY_CHARS = 16_000;
 const MAX_FILE_OPS_SECTION_CHARS = 2_000;
 const MAX_FILE_OPS_LIST_CHARS = 900;
 const SUMMARY_TRUNCATED_MARKER = "\n\n[Compaction summary truncated to fit budget]";
-const DEFAULT_RECENT_TURNS_PRESERVE = 3;
 const DEFAULT_QUALITY_GUARD_MAX_RETRIES = 1;
 const MAX_RECENT_TURNS_PRESERVE = 12;
 const MAX_QUALITY_GUARD_MAX_RETRIES = 3;
@@ -95,7 +98,7 @@ function clampNonNegativeInt(value: unknown, fallback: number): number {
 function resolveRecentTurnsPreserve(value: unknown): number {
   return Math.min(
     MAX_RECENT_TURNS_PRESERVE,
-    clampNonNegativeInt(value, DEFAULT_RECENT_TURNS_PRESERVE),
+    clampNonNegativeInt(value, DEFAULT_COMPACTION_RECENT_TURNS_PRESERVE),
   );
 }
 
@@ -685,7 +688,7 @@ export default function compactionSafeguardExtension(api: ExtensionAPI): void {
         summarizationInstructions,
       );
 
-      const maxHistoryShare = runtime?.maxHistoryShare ?? 0.5;
+      const maxHistoryShare = runtime?.maxHistoryShare ?? DEFAULT_COMPACTION_MAX_HISTORY_SHARE;
 
       const tokensBefore =
         typeof preparation.tokensBefore === "number" && Number.isFinite(preparation.tokensBefore)

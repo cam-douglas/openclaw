@@ -855,7 +855,7 @@ describe("compaction-safeguard recent-turn preservation", () => {
   });
 
   it("clamps preserve count into a safe range", () => {
-    expect(resolveRecentTurnsPreserve(undefined)).toBe(3);
+    expect(resolveRecentTurnsPreserve(undefined)).toBe(8);
     expect(resolveRecentTurnsPreserve(-1)).toBe(0);
     expect(resolveRecentTurnsPreserve(99)).toBe(12);
   });

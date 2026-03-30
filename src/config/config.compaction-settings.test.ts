@@ -70,6 +70,48 @@ describe("config compaction settings", () => {
     );
   });
 
+  it("applies TPM-aware compaction defaults when agents.defaults is empty", async () => {
+    await withTempHomeConfig(
+      {
+        agents: {
+          defaults: {},
+        },
+      },
+      async () => {
+        const cfg = loadConfig();
+        expect(cfg.agents?.defaults?.compaction?.mode).toBe("safeguard");
+        expect(cfg.agents?.defaults?.compaction?.maxHistoryShare).toBe(0.15);
+        expect(cfg.agents?.defaults?.compaction?.recentTurnsPreserve).toBe(8);
+        expect(cfg.agents?.defaults?.compaction?.toolResultContextHeadroomRatio).toBe(0.78);
+        expect(cfg.agents?.defaults?.compaction?.toolResultPreserveRecent).toBe(3);
+        expect(cfg.agents?.defaults?.compaction?.toolResultMaxSingleShare).toBe(0.35);
+        expect(cfg.agents?.defaults?.contextTokens).toBe(200_000);
+      },
+    );
+  });
+
+  it("does not override explicit compaction tuning", async () => {
+    await withTempHomeConfig(
+      {
+        agents: {
+          defaults: {
+            compaction: {
+              mode: "safeguard",
+              maxHistoryShare: 0.5,
+              toolResultContextHeadroomRatio: 0.9,
+            },
+          },
+        },
+      },
+      async () => {
+        const cfg = loadConfig();
+        expect(cfg.agents?.defaults?.compaction?.maxHistoryShare).toBe(0.5);
+        expect(cfg.agents?.defaults?.compaction?.toolResultContextHeadroomRatio).toBe(0.9);
+        expect(cfg.agents?.defaults?.compaction?.recentTurnsPreserve).toBe(8);
+      },
+    );
+  });
+
   it("defaults compaction mode to safeguard", async () => {
     await withTempHomeConfig(
       {

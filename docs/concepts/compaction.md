@@ -83,11 +83,15 @@ For **Anthropic Claude** models, the API **context window** is **200,000 tokens*
 
 **Important:** the per-response **max output tokens** (`maxTokens` on the model) is **not** the context window. OpenClaw must not use output limits when estimating how full the session is; otherwise a typical ~16k output cap would make a healthy session look like **>200%** usage and trigger compaction far too early.
 
-If you set `agents.defaults.contextTokens` in `openclaw.json`, it **caps** the budget when the value is **lower** than the model’s catalog window (it does not raise the limit above the catalog).
+If you set `agents.defaults.contextTokens` in `openclaw.json`, it **caps** the budget when the value is **lower** than the model’s catalog window (it does not raise the limit above the catalog). When unset, OpenClaw applies a **200,000** token cap on large-window models so prompts stay smaller and rate limits (TPM) are less likely to spike.
 
-## Tool-result headroom (default 95%)
+## Tool-result headroom (default ~78%)
 
-Preemptive **tool-result** compaction (replacing older tool output with placeholders) runs when estimated context exceeds **~95%** of the resolved window. Tune with `agents.defaults.compaction.toolResultContextHeadroomRatio` (range `0.5`–`0.95`; default **`0.95`**). After tool outputs are compacted, if estimated context still exceeds **~98%** of the resolved window (non-tool content dominates), the run throws into the overflow recovery path so **session** compaction (LLM summary / handover) can run.
+Preemptive **tool-result** compaction (replacing older tool output with placeholders) runs when estimated context exceeds the configured fraction of the resolved window. Tune with `agents.defaults.compaction.toolResultContextHeadroomRatio` (range `0.5`–`0.95`; default **`0.78`**). After tool outputs are compacted, if estimated context still exceeds **~98%** of the resolved window (non-tool content dominates), the run throws into the overflow recovery path so **session** compaction (LLM summary / handover) can run.
+
+## Default compaction tuning (TPM / large windows)
+
+When `agents.defaults.compaction` omits fields, OpenClaw merges **safeguard** mode plus conservative defaults: lower **`maxHistoryShare`** (0.15), **`recentTurnsPreserve`** (8), tighter tool-result settings, and a **`contextTokens`** cap of **200,000** when unset. Override any key in `openclaw.json` if you need deeper history or looser tool retention.
 
 ## Compaction vs pruning
 

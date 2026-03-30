@@ -1,6 +1,14 @@
 import { DEFAULT_CONTEXT_TOKENS } from "../agents/defaults.js";
 import { normalizeProviderId, parseModelRef } from "../agents/model-selection.js";
 import { DEFAULT_AGENT_MAX_CONCURRENT, DEFAULT_SUBAGENT_MAX_CONCURRENT } from "./agent-limits.js";
+import {
+  DEFAULT_AGENT_CONTEXT_TOKEN_CAP,
+  DEFAULT_COMPACTION_MAX_HISTORY_SHARE,
+  DEFAULT_COMPACTION_RECENT_TURNS_PRESERVE,
+  DEFAULT_TOOL_RESULT_CONTEXT_HEADROOM_RATIO,
+  DEFAULT_TOOL_RESULT_MAX_SINGLE_SHARE,
+  DEFAULT_TOOL_RESULT_PRESERVE_RECENT,
+} from "./compaction-defaults.js";
 import { resolveAgentModelPrimaryValue } from "./model-input.js";
 import {
   LEGACY_TALK_PROVIDER_ID,
@@ -536,13 +544,38 @@ export function applyContextPruningDefaults(cfg: OpenClawConfig): OpenClawConfig
   };
 }
 
+const DEFAULT_COMPACTION_FIELD_KEYS: Record<string, number> = {
+  maxHistoryShare: DEFAULT_COMPACTION_MAX_HISTORY_SHARE,
+  recentTurnsPreserve: DEFAULT_COMPACTION_RECENT_TURNS_PRESERVE,
+  toolResultContextHeadroomRatio: DEFAULT_TOOL_RESULT_CONTEXT_HEADROOM_RATIO,
+  toolResultPreserveRecent: DEFAULT_TOOL_RESULT_PRESERVE_RECENT,
+  toolResultMaxSingleShare: DEFAULT_TOOL_RESULT_MAX_SINGLE_SHARE,
+};
+
 export function applyCompactionDefaults(cfg: OpenClawConfig): OpenClawConfig {
   const defaults = cfg.agents?.defaults;
   if (!defaults) {
     return cfg;
   }
-  const compaction = defaults?.compaction;
-  if (compaction?.mode) {
+
+  const compaction = defaults.compaction;
+  const base: Record<string, unknown> = compaction ? { ...compaction } : {};
+  let compactionChanged = false;
+
+  for (const [key, value] of Object.entries(DEFAULT_COMPACTION_FIELD_KEYS)) {
+    if (base[key] === undefined) {
+      base[key] = value;
+      compactionChanged = true;
+    }
+  }
+  if (base.mode === undefined) {
+    base.mode = "safeguard";
+    compactionChanged = true;
+  }
+
+  const contextChanged = defaults.contextTokens === undefined;
+
+  if (!compactionChanged && !contextChanged) {
     return cfg;
   }
 
@@ -552,10 +585,10 @@ export function applyCompactionDefaults(cfg: OpenClawConfig): OpenClawConfig {
       ...cfg.agents,
       defaults: {
         ...defaults,
-        compaction: {
-          ...compaction,
-          mode: "safeguard",
-        },
+        ...(contextChanged ? { contextTokens: DEFAULT_AGENT_CONTEXT_TOKEN_CAP } : {}),
+        ...(compactionChanged
+          ? { compaction: base as NonNullable<typeof defaults.compaction> }
+          : {}),
       },
     },
   };
