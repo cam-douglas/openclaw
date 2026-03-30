@@ -312,6 +312,8 @@ openclaw gateway restart
 
 Open: `http://<tailscale-ip>:18789` (token required).
 
+If you still use an SSH tunnel or **`openclaw tui droplet`** on macOS, the forward must target that same address (not loopback). Set **`OPENCLAW_DROPLET_SSH_FORWARD_HOST`** to the droplet Tailscale IPv4 in your repo **`.env`** (and use **`./scripts/droplet-tunnel.sh`**, which reads it). Default is **`127.0.0.1`**.
+
 ## 7) Connect Your Channels
 
 ### Telegram

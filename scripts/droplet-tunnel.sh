@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Open an SSH local port forward to the gateway Control UI (127.0.0.1:18789 on the droplet).
+# Open an SSH local port forward to the gateway Control UI on the droplet (default 127.0.0.1:18789).
+# When gateway.bind is tailnet, set OPENCLAW_DROPLET_SSH_FORWARD_HOST to the droplet Tailscale IPv4.
 # Same sudo gate as droplet-ssh.sh: sudo -v before ssh, sudo -k on exit.
 # See docs/platforms/digitalocean.md → "Security model, limits, and mitigations".
 #
@@ -23,6 +24,7 @@ set +a
 
 DROPLET_IP="${DROPLET_IP:?Set DROPLET_IP in $ENV_FILE}"
 TARGET="${SSH_USER:-root}@${DROPLET_IP}"
+FORWARD_HOST="${OPENCLAW_DROPLET_SSH_FORWARD_HOST:-127.0.0.1}"
 
 # shellcheck source=scripts/droplet-ssh-common.sh
 source "$ROOT/scripts/droplet-ssh-common.sh"
@@ -34,4 +36,4 @@ droplet_sudo_gate_refresh
 droplet_sudo_revoke_on_exit
 
 # Do not use exec ssh — the EXIT trap must run when the tunnel ends (sudo -k).
-ssh "${DROPLET_SSH_OPTS[@]}" -o ExitOnForwardFailure=yes -L 18789:localhost:18789 -N "$TARGET"
+ssh "${DROPLET_SSH_OPTS[@]}" -o ExitOnForwardFailure=yes -L "18789:${FORWARD_HOST}:18789" -N "$TARGET"

@@ -63,12 +63,14 @@ import {
   mergeDropletForwardGatewayEnvFromEnvFiles,
   playDropletRemoteCompletionChime,
   isTrailingDropletRemoteInvocation,
+  resolveDropletSshForwardHost,
   stripTrailingDroplet,
   tryLoadDropletIpFromHomeCheckoutEnv,
   tryHandleDropletRemoteCli,
 } from "./droplet-remote.js";
 
 const mockedSpawnSync = vi.mocked(childProcess.spawnSync);
+const mockedSpawn = vi.mocked(childProcess.spawn);
 
 describe("playDropletRemoteCompletionChime", () => {
   const originalPlatform = process.platform;
@@ -397,8 +399,51 @@ describe("buildDropletRemoteBashLcLine", () => {
   });
 });
 
+describe("resolveDropletSshForwardHost", () => {
+  it("defaults to loopback when unset", () => {
+    expect(resolveDropletSshForwardHost({})).toBe("127.0.0.1");
+  });
+
+  it("accepts IPv4", () => {
+    expect(
+      resolveDropletSshForwardHost({ OPENCLAW_DROPLET_SSH_FORWARD_HOST: "100.126.96.38" }),
+    ).toBe("100.126.96.38");
+  });
+
+  it("brackets IPv6 literals for OpenSSH", () => {
+    expect(resolveDropletSshForwardHost({ OPENCLAW_DROPLET_SSH_FORWARD_HOST: "::1" })).toBe(
+      "[::1]",
+    );
+  });
+
+  it("accepts localhost", () => {
+    expect(resolveDropletSshForwardHost({ OPENCLAW_DROPLET_SSH_FORWARD_HOST: "localhost" })).toBe(
+      "localhost",
+    );
+  });
+
+  it("accepts a hostname", () => {
+    expect(
+      resolveDropletSshForwardHost({ OPENCLAW_DROPLET_SSH_FORWARD_HOST: "my-host.internal" }),
+    ).toBe("my-host.internal");
+  });
+
+  it("falls back on invalid values", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(resolveDropletSshForwardHost({ OPENCLAW_DROPLET_SSH_FORWARD_HOST: "bad;rm" })).toBe(
+      "127.0.0.1",
+    );
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
+
 describe("tryHandleDropletRemoteCli (tui droplet)", () => {
   const originalPlatform = process.platform;
+
+  beforeEach(() => {
+    mockedSpawn.mockClear();
+  });
 
   afterEach(() => {
     Object.defineProperty(process, "platform", { value: originalPlatform });
@@ -406,6 +451,7 @@ describe("tryHandleDropletRemoteCli (tui droplet)", () => {
     delete process.env.SSH_USER;
     delete process.env.OPENCLAW_GATEWAY_TOKEN;
     delete process.env.OPENCLAW_DROPLET_TUI_FORWARD_PORT;
+    delete process.env.OPENCLAW_DROPLET_SSH_FORWARD_HOST;
     vi.restoreAllMocks();
     mockedSpawnSync.mockClear();
   });
@@ -426,6 +472,12 @@ describe("tryHandleDropletRemoteCli (tui droplet)", () => {
       tryHandleDropletRemoteCli(["node", "openclaw", "tui", "--session", "main", "droplet"]),
     ).toThrow(/process\.exit/);
 
+    expect(mockedSpawn).toHaveBeenCalledWith(
+      "ssh",
+      expect.arrayContaining(["-L", "18791:127.0.0.1:18789"]),
+      expect.objectContaining({ stdio: "inherit" }),
+    );
+
     // Local TUI invocation.
     expect(mockedSpawnSync).toHaveBeenCalledWith(
       "openclaw",
@@ -436,5 +488,29 @@ describe("tryHandleDropletRemoteCli (tui droplet)", () => {
       }),
     );
     expect(exitSpy).toHaveBeenCalled();
+  });
+
+  it("uses OPENCLAW_DROPLET_SSH_FORWARD_HOST in the SSH tunnel", () => {
+    Object.defineProperty(process, "platform", { value: "darwin" });
+    process.env.DROPLET_IP = "203.0.113.10";
+    process.env.SSH_USER = "root";
+    process.env.OPENCLAW_GATEWAY_TOKEN = "tok";
+    process.env.OPENCLAW_DROPLET_TUI_FORWARD_PORT = "18791";
+    process.env.OPENCLAW_DROPLET_SSH_FORWARD_HOST = "100.126.96.38";
+    process.env.OPENCLAW_DROPLET_SUDO_GATE = "0";
+
+    vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code ?? "unknown"})`);
+    }) as never);
+
+    expect(() =>
+      tryHandleDropletRemoteCli(["node", "openclaw", "tui", "--session", "main", "droplet"]),
+    ).toThrow(/process\.exit/);
+
+    expect(mockedSpawn).toHaveBeenCalledWith(
+      "ssh",
+      expect.arrayContaining(["-L", "18791:100.126.96.38:18789"]),
+      expect.objectContaining({ stdio: "inherit" }),
+    );
   });
 });

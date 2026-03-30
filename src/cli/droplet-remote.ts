@@ -6,6 +6,7 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { isIPv4, isIPv6 } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -58,6 +59,32 @@ function resolveDropletLocalTuiForwardPort(): number {
   return parsed;
 }
 
+/**
+ * Remote host for `ssh -L local:host:18789` (where the gateway listens on the VPS).
+ * When `gateway.bind` is `tailnet`, the gateway may not listen on loopback; set this to the
+ * droplet's Tailscale IPv4 (for example from `tailscale ip -4` on the server).
+ */
+export function resolveDropletSshForwardHost(env: NodeJS.ProcessEnv = process.env): string {
+  const raw = env.OPENCLAW_DROPLET_SSH_FORWARD_HOST?.trim();
+  if (!raw) {
+    return "127.0.0.1";
+  }
+  if (isIPv4(raw)) {
+    return raw;
+  }
+  if (isIPv6(raw)) {
+    return `[${raw}]`;
+  }
+  if (raw === "localhost") {
+    return raw;
+  }
+  if (/^[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?$/.test(raw)) {
+    return raw;
+  }
+  console.warn(`[openclaw] OPENCLAW_DROPLET_SSH_FORWARD_HOST ignored (invalid host): ${raw}`);
+  return "127.0.0.1";
+}
+
 function runDropletLocalTuiViaSshTunnel(params: {
   target: string;
   sshOpts: string[];
@@ -67,6 +94,7 @@ function runDropletLocalTuiViaSshTunnel(params: {
   const url = `ws://127.0.0.1:${localPort}`;
   const token = process.env.OPENCLAW_GATEWAY_TOKEN?.trim();
   const password = process.env.OPENCLAW_GATEWAY_PASSWORD?.trim();
+  const forwardHost = resolveDropletSshForwardHost();
 
   // Keep the SSH tunnel open while local `openclaw tui` runs so the macOS completion chime
   // (Funk by default) can play when an agent reply finalizes.
@@ -77,7 +105,7 @@ function runDropletLocalTuiViaSshTunnel(params: {
       "-o",
       "ExitOnForwardFailure=yes",
       "-L",
-      `${localPort}:127.0.0.1:18789`,
+      `${localPort}:${forwardHost}:18789`,
       params.target,
       "-N",
     ],
