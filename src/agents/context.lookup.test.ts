@@ -409,6 +409,36 @@ describe("resolveContextTokensForModel claude-cli", () => {
     });
     expect(result).toBe(200_000);
   });
+
+  it("resolves Gemini CLI via Google limits when discovery stores 16k under google-gemini-cli/...", async () => {
+    mockDiscoveryDeps([{ id: "google-gemini-cli/gemini-2.5-pro", contextWindow: 16_384 }], {
+      google: {
+        models: [{ id: "gemini-2.5-pro", contextWindow: 1_048_576 }],
+      },
+    });
+    const resolveContextTokensForModel = await importResolveContextTokensForModel();
+    const result = resolveContextTokensForModel({
+      provider: "google-gemini-cli",
+      model: "gemini-2.5-pro",
+      allowAsyncLoad: false,
+    });
+    expect(result).toBe(1_048_576);
+  });
+
+  it("resolves Codex CLI via OpenAI limits when discovery stores 16k under codex-cli/...", async () => {
+    mockDiscoveryDeps([{ id: "codex-cli/gpt-5.4", contextWindow: 16_384 }], {
+      openai: {
+        models: [{ id: "gpt-5.4", contextWindow: 256_000 }],
+      },
+    });
+    const resolveContextTokensForModel = await importResolveContextTokensForModel();
+    const result = resolveContextTokensForModel({
+      provider: "codex-cli",
+      model: "gpt-5.4",
+      allowAsyncLoad: false,
+    });
+    expect(result).toBe(256_000);
+  });
 });
 
 describe("resolveSessionPersistedContextTokensForDisplay", () => {

@@ -361,6 +361,25 @@ function resolveConfiguredProviderContextWindow(
   return findContextWindow((id) => normalizeProviderId(id) === normalizedProvider);
 }
 
+/**
+ * Bundled text-only CLI backends use the same model ids as a first-party API provider.
+ * Discovery may store per-response output (~16k) as `contextWindow` under qualified CLI ids;
+ * resolving via the API provider avoids **`?/16k`** in status/session for all models on that backend.
+ */
+function resolveCliBackendApiProvider(provider: string): string | undefined {
+  const p = normalizeProviderId(provider);
+  if (p === "claude-cli") {
+    return "anthropic";
+  }
+  if (p === "google-gemini-cli") {
+    return "google";
+  }
+  if (p === "codex-cli") {
+    return "openai";
+  }
+  return undefined;
+}
+
 function isAnthropic1MModel(provider: string, model: string): boolean {
   const p = normalizeProviderId(provider);
   // Claude CLI uses the same opus/sonnet model ids as the Anthropic API.
@@ -414,19 +433,21 @@ export function resolveContextTokensForModel(params: {
     }
   }
 
-  // Claude CLI: discovery often stores ~16k (output cap) under `claude-cli/<model>`.
-  // After configured-model and catalog scans above, resolve the same bare model id
-  // as Anthropic API so status/session limits match real Claude windows.
-  if (ref && normalizeProviderId(ref.provider) === "claude-cli") {
-    const bareModel = ref.model.trim();
-    if (bareModel.toLowerCase().startsWith("claude-")) {
-      return resolveContextTokensForModel({
-        cfg: params.cfg,
-        provider: "anthropic",
-        model: bareModel,
-        fallbackContextTokens: params.fallbackContextTokens,
-        allowAsyncLoad: params.allowAsyncLoad,
-      });
+  // CLI backends (claude-cli, google-gemini-cli, codex-cli, …): resolve context like the
+  // upstream API so limits match real model windows for every model id on that backend.
+  if (ref) {
+    const apiProvider = resolveCliBackendApiProvider(ref.provider);
+    if (apiProvider) {
+      const bareModel = ref.model.trim();
+      if (bareModel && !bareModel.includes("/")) {
+        return resolveContextTokensForModel({
+          cfg: params.cfg,
+          provider: apiProvider,
+          model: bareModel,
+          fallbackContextTokens: params.fallbackContextTokens,
+          allowAsyncLoad: params.allowAsyncLoad,
+        });
+      }
     }
   }
 
