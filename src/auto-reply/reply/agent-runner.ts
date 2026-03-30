@@ -1,5 +1,9 @@
 import fs from "node:fs";
-import { lookupContextTokens } from "../../agents/context.js";
+import {
+  lookupContextTokens,
+  resolveContextTokensForModel,
+  resolveSessionPersistedContextTokensForDisplay,
+} from "../../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../agents/defaults.js";
 import { resolveModelAuthMode } from "../../agents/model-auth.js";
 import { isCliProvider } from "../../agents/model-selection.js";
@@ -519,11 +523,36 @@ export async function runReplyAgent(params: {
     const cliSessionBinding = isCliProvider(providerUsed, cfg)
       ? runResult.meta?.agentMeta?.cliSessionBinding
       : undefined;
+    const modelResolvedContext =
+      resolveContextTokensForModel({
+        cfg,
+        provider: providerUsed,
+        model: modelUsed,
+        fallbackContextTokens: DEFAULT_CONTEXT_TOKENS,
+        allowAsyncLoad: false,
+      }) ?? DEFAULT_CONTEXT_TOKENS;
     const contextTokensUsed =
-      agentCfgContextTokens ??
+      resolveSessionPersistedContextTokensForDisplay({
+        persisted: agentCfgContextTokens,
+        cfg,
+        provider: providerUsed,
+        model: modelUsed,
+        fallbackContextTokens: DEFAULT_CONTEXT_TOKENS,
+        allowAsyncLoad: false,
+      }) ??
       lookupContextTokens(modelUsed) ??
-      activeSessionEntry?.contextTokens ??
-      DEFAULT_CONTEXT_TOKENS;
+      resolveSessionPersistedContextTokensForDisplay({
+        persisted:
+          typeof activeSessionEntry?.contextTokens === "number"
+            ? activeSessionEntry.contextTokens
+            : undefined,
+        cfg,
+        provider: providerUsed,
+        model: modelUsed,
+        fallbackContextTokens: DEFAULT_CONTEXT_TOKENS,
+        allowAsyncLoad: false,
+      }) ??
+      modelResolvedContext;
 
     await persistRunSessionUsage({
       storePath,

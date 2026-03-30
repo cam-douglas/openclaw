@@ -1285,6 +1285,72 @@ describe("listSessionsFromStore search", () => {
     }
   });
 
+  test("ignores stale persisted contextTokens 16k so transcript fallback fills totalTokens and model context", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-session-utils-stale-ctx-"));
+    const storePath = path.join(tmpDir, "sessions.json");
+    const cfg = {
+      session: { mainKey: "main" },
+      agents: {
+        list: [{ id: "main", default: true }],
+        defaults: {
+          models: {
+            "anthropic/claude-sonnet-4-6": { params: { context1m: true } },
+          },
+        },
+      },
+    } as unknown as OpenClawConfig;
+    fs.writeFileSync(
+      path.join(tmpDir, "sess-main.jsonl"),
+      [
+        JSON.stringify({ type: "session", version: 1, id: "sess-main" }),
+        JSON.stringify({
+          message: {
+            role: "assistant",
+            provider: "anthropic",
+            model: "claude-sonnet-4-6",
+            usage: {
+              input: 2_000,
+              output: 500,
+              cacheRead: 1_200,
+              cost: { total: 0.007725 },
+            },
+          },
+        }),
+      ].join("\n"),
+      "utf-8",
+    );
+
+    try {
+      const result = listSessionsFromStore({
+        cfg,
+        storePath,
+        store: {
+          "agent:main:main": {
+            sessionId: "sess-main",
+            updatedAt: Date.now(),
+            modelProvider: "anthropic",
+            model: "claude-sonnet-4-6",
+            contextTokens: 16_384,
+            totalTokens: 0,
+            totalTokensFresh: false,
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+          } as SessionEntry,
+        },
+        opts: {},
+      });
+
+      expect(result.sessions[0]?.totalTokens).toBe(3_200);
+      expect(result.sessions[0]?.totalTokensFresh).toBe(true);
+      expect(result.sessions[0]?.contextTokens).toBe(1_048_576);
+      expect(result.sessions[0]?.estimatedCostUsd).toBeCloseTo(0.007725, 8);
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   test("uses subagent run model immediately for child sessions while transcript usage fills live totals", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "openclaw-session-utils-subagent-"));
     const storePath = path.join(tmpDir, "sessions.json");

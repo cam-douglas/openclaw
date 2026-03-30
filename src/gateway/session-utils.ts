@@ -6,7 +6,11 @@ import {
   resolveAgentWorkspaceDir,
   resolveDefaultAgentId,
 } from "../agents/agent-scope.js";
-import { lookupContextTokens, resolveContextTokensForModel } from "../agents/context.js";
+import {
+  lookupContextTokens,
+  resolveContextTokensForModel,
+  resolveSessionPersistedContextTokensForDisplay,
+} from "../agents/context.js";
 import { DEFAULT_CONTEXT_TOKENS, DEFAULT_MODEL, DEFAULT_PROVIDER } from "../agents/defaults.js";
 import {
   inferUniqueProviderFromConfiguredModels,
@@ -1172,9 +1176,23 @@ export function buildGatewaySessionRow(params: {
   );
   const modelProvider = resolvedModel.provider;
   const model = resolvedModel.model ?? DEFAULT_MODEL;
+  const rawPersistedContext = resolvePositiveNumber(entry?.contextTokens);
+  const repairedSessionContext = resolveSessionPersistedContextTokensForDisplay({
+    persisted: rawPersistedContext,
+    cfg,
+    provider: modelProvider,
+    model,
+    fallbackContextTokens: DEFAULT_CONTEXT_TOKENS,
+    allowAsyncLoad: false,
+  });
+  // Stale output-cap values (e.g. 16k) were persisted as `contextTokens`; treat as missing so we
+  // still run transcript fallback for totals/cost when the store row is incomplete.
+  const stalePersistedContext =
+    typeof rawPersistedContext === "number" && repairedSessionContext === undefined;
+  const contextTokensForTranscriptGate = stalePersistedContext ? undefined : rawPersistedContext;
   const transcriptUsage =
     resolvePositiveNumber(resolveFreshSessionTotalTokens(entry)) === undefined ||
-    resolvePositiveNumber(entry?.contextTokens) === undefined ||
+    resolvePositiveNumber(contextTokensForTranscriptGate) === undefined ||
     resolveEstimatedSessionCostUsd({
       cfg,
       provider: modelProvider,
@@ -1206,7 +1224,7 @@ export function buildGatewaySessionRow(params: {
       entry,
     }) ?? resolveNonNegativeNumber(transcriptUsage?.estimatedCostUsd);
   const contextTokens =
-    resolvePositiveNumber(entry?.contextTokens) ??
+    repairedSessionContext ??
     resolvePositiveNumber(transcriptUsage?.contextTokens) ??
     resolvePositiveNumber(
       resolveContextTokensForModel({
