@@ -380,6 +380,37 @@ describe("lookupContextTokens", () => {
   });
 });
 
+describe("resolveContextTokensForModel claude-cli", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(async () => {
+    try {
+      const { resetContextWindowCacheForTest } = await import("./context.js");
+      resetContextWindowCacheForTest();
+    } catch {
+      // Ignore reset failures when a test aborts before the module loads.
+    }
+    await flushAsyncWarmup();
+  });
+
+  it("resolves Claude CLI via Anthropic limits when discovery stores 16k under claude-cli/...", async () => {
+    mockDiscoveryDeps([{ id: "claude-cli/claude-sonnet-4-6", contextWindow: 16_384 }], {
+      anthropic: {
+        models: [{ id: "claude-sonnet-4-6", contextWindow: 200_000 }],
+      },
+    });
+    const resolveContextTokensForModel = await importResolveContextTokensForModel();
+    const result = resolveContextTokensForModel({
+      provider: "claude-cli",
+      model: "claude-sonnet-4-6",
+      allowAsyncLoad: false,
+    });
+    expect(result).toBe(200_000);
+  });
+});
+
 describe("resolveSessionPersistedContextTokensForDisplay", () => {
   beforeEach(() => {
     vi.resetModules();

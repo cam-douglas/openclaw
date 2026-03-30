@@ -362,7 +362,9 @@ function resolveConfiguredProviderContextWindow(
 }
 
 function isAnthropic1MModel(provider: string, model: string): boolean {
-  if (provider !== "anthropic") {
+  const p = normalizeProviderId(provider);
+  // Claude CLI uses the same opus/sonnet model ids as the Anthropic API.
+  if (p !== "anthropic" && p !== "claude-cli") {
     return false;
   }
   const normalized = model.trim().toLowerCase();
@@ -409,6 +411,22 @@ export function resolveContextTokensForModel(params: {
       if (configuredWindow !== undefined) {
         return configuredWindow;
       }
+    }
+  }
+
+  // Claude CLI: discovery often stores ~16k (output cap) under `claude-cli/<model>`.
+  // After configured-model and catalog scans above, resolve the same bare model id
+  // as Anthropic API so status/session limits match real Claude windows.
+  if (ref && normalizeProviderId(ref.provider) === "claude-cli") {
+    const bareModel = ref.model.trim();
+    if (bareModel.toLowerCase().startsWith("claude-")) {
+      return resolveContextTokensForModel({
+        cfg: params.cfg,
+        provider: "anthropic",
+        model: bareModel,
+        fallbackContextTokens: params.fallbackContextTokens,
+        allowAsyncLoad: params.allowAsyncLoad,
+      });
     }
   }
 

@@ -192,4 +192,25 @@ describe("resolveContextTokensForModel", () => {
 
     expect(result).toBe(200_000);
   });
+
+  it("returns 1M context for claude-cli when context1m is enabled on the CLI model key", () => {
+    const result = resolveContextTokensForModel({
+      cfg: {
+        agents: {
+          defaults: {
+            models: {
+              "claude-cli/claude-opus-4-6": {
+                params: { context1m: true },
+              },
+            },
+          },
+        },
+      },
+      provider: "claude-cli",
+      model: "claude-opus-4-6",
+      fallbackContextTokens: 200_000,
+    });
+
+    expect(result).toBe(ANTHROPIC_CONTEXT_1M_TOKENS);
+  });
 });
