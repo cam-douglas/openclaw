@@ -8,6 +8,7 @@ import { computeBackoff, type BackoffPolicy } from "../infra/backoff.js";
 import { consumeRootOptionToken, FLAG_TERMINATOR } from "../infra/cli-root-options.js";
 import { resolveOpenClawAgentDir } from "./agent-paths.js";
 import { lookupCachedContextTokens, MODEL_CONTEXT_TOKEN_CACHE } from "./context-cache.js";
+import { DEFAULT_CONTEXT_TOKENS } from "./defaults.js";
 import { normalizeProviderId } from "./model-selection.js";
 
 type ModelEntry = { id: string; contextWindow?: number };
@@ -393,7 +394,26 @@ function isAnthropic1MModel(provider: string, model: string): boolean {
   return ANTHROPIC_1M_MODEL_PREFIXES.some((prefix) => modelId.startsWith(prefix));
 }
 
-export function resolveContextTokensForModel(params: {
+/** `models.providers` rows can echo max-output sizes as `contextWindow` for CLI backends; treat as unusable so we resolve via the upstream API or qualified CLI discovery. */
+function isMistakenOutputCapCatalogWindow(value: number): boolean {
+  return value === 16_384 || value === 32_768 || value === 65_536;
+}
+
+/** Discovery bare lookups sometimes return max-output (~16k/32k/64k) as the "window"; prefer fallback when that happens. */
+function sanitizeMistakenOutputCapAsContextWindow(
+  value: number | undefined,
+  fallback: number | undefined,
+): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === 16_384 || value === 32_768 || value === 65_536) {
+    return fallback ?? DEFAULT_CONTEXT_TOKENS;
+  }
+  return value;
+}
+
+function resolveContextTokensForModelInner(params: {
   cfg?: OpenClawConfig;
   provider?: string;
   model?: string;
@@ -401,10 +421,6 @@ export function resolveContextTokensForModel(params: {
   fallbackContextTokens?: number;
   allowAsyncLoad?: boolean;
 }): number | undefined {
-  if (typeof params.contextTokensOverride === "number" && params.contextTokensOverride > 0) {
-    return params.contextTokensOverride;
-  }
-
   const ref = resolveProviderModelRef({
     provider: params.provider,
     model: params.model,
@@ -414,6 +430,7 @@ export function resolveContextTokensForModel(params: {
     if (modelParams?.context1m === true && isAnthropic1MModel(ref.provider, ref.model)) {
       return ANTHROPIC_CONTEXT_1M_TOKENS;
     }
+
     // Only do the config direct scan when the caller explicitly passed a
     // provider. When provider is inferred from a slash in the model string
     // (e.g. "google/gemini-2.5-pro" → ref.provider = "google"), the model ID
@@ -428,25 +445,39 @@ export function resolveContextTokensForModel(params: {
         ref.model,
       );
       if (configuredWindow !== undefined) {
-        return configuredWindow;
+        const cliBackend = resolveCliBackendApiProvider(ref.provider);
+        if (!cliBackend || !isMistakenOutputCapCatalogWindow(configuredWindow)) {
+          return configuredWindow;
+        }
+        // CLI catalog row is a bogus output-cap snapshot — resolve like upstream API below.
       }
     }
-  }
 
-  // CLI backends (claude-cli, google-gemini-cli, codex-cli, …): resolve context like the
-  // upstream API so limits match real model windows for every model id on that backend.
-  if (ref) {
-    const apiProvider = resolveCliBackendApiProvider(ref.provider);
-    if (apiProvider) {
+    // Bundled CLI backends: prefer qualified CLI discovery (`google-gemini-cli/model` → 1M)
+    // over bare-model API lookups (bare id may be a cross-provider minimum, e.g. 128k).
+    // If the qualified row is a bogus output-cap, resolve like the upstream API.
+    // See docs/concepts/compaction.md (max output ≠ context window).
+    const apiProviderEarly = resolveCliBackendApiProvider(ref.provider);
+    if (apiProviderEarly) {
       const bareModel = ref.model.trim();
-      if (bareModel && !bareModel.includes("/")) {
-        return resolveContextTokensForModel({
+      if (bareModel && !bareModel.includes("/") && params.provider) {
+        const qualifiedCli = lookupContextTokens(
+          `${normalizeProviderId(ref.provider)}/${bareModel}`,
+          { allowAsyncLoad: params.allowAsyncLoad },
+        );
+        if (qualifiedCli !== undefined && !isMistakenOutputCapCatalogWindow(qualifiedCli)) {
+          return qualifiedCli;
+        }
+        const viaApi = resolveContextTokensForModel({
           cfg: params.cfg,
-          provider: apiProvider,
+          provider: apiProviderEarly,
           model: bareModel,
           fallbackContextTokens: params.fallbackContextTokens,
           allowAsyncLoad: params.allowAsyncLoad,
         });
+        if (viaApi !== undefined) {
+          return viaApi;
+        }
       }
     }
   }
@@ -498,6 +529,21 @@ export function resolveContextTokensForModel(params: {
   return params.fallbackContextTokens;
 }
 
+export function resolveContextTokensForModel(params: {
+  cfg?: OpenClawConfig;
+  provider?: string;
+  model?: string;
+  contextTokensOverride?: number;
+  fallbackContextTokens?: number;
+  allowAsyncLoad?: boolean;
+}): number | undefined {
+  if (typeof params.contextTokensOverride === "number" && params.contextTokensOverride > 0) {
+    return params.contextTokensOverride;
+  }
+  const raw = resolveContextTokensForModelInner(params);
+  return sanitizeMistakenOutputCapAsContextWindow(raw, params.fallbackContextTokens);
+}
+
 /**
  * Common per-response output caps that older builds sometimes persisted as
  * `session.contextTokens` when confusing `maxTokens` with the context window.
@@ -520,6 +566,13 @@ export function isLikelyStaleOutputCapPersistedAsSessionContext(
   }
   if (!STALE_SESSION_CONTEXT_MARKERS.has(persisted)) {
     return false;
+  }
+  // Discovery and the session store can both echo the same max-output value (16k/32k/64k class).
+  if (
+    persisted === resolvedModelWindow &&
+    (persisted === 16_384 || persisted === 32_768 || persisted === 65_536)
+  ) {
+    return true;
   }
   return resolvedModelWindow >= persisted * 4;
 }
