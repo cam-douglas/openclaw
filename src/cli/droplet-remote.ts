@@ -4,7 +4,7 @@
  * `sudo -v` so macOS/PAM does not double-prompt).
  * Limits and mitigations: docs/platforms/digitalocean.md → "Security model, limits, and mitigations".
  */
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -45,6 +45,80 @@ export function revokeDropletLocalSudoGate(): void {
 
 /** Alias for `playMacCompletionChime` (see `src/infra/mac-completion-chime.ts`). */
 export const playDropletRemoteCompletionChime = playMacCompletionChime;
+
+function resolveDropletLocalTuiForwardPort(): number {
+  const raw = process.env.OPENCLAW_DROPLET_TUI_FORWARD_PORT?.trim();
+  if (!raw) {
+    return 18_790;
+  }
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 65_535) {
+    return 18_790;
+  }
+  return parsed;
+}
+
+function runDropletLocalTuiViaSshTunnel(params: {
+  target: string;
+  sshOpts: string[];
+  forward: string[];
+}): never {
+  const localPort = resolveDropletLocalTuiForwardPort();
+  const url = `ws://127.0.0.1:${localPort}`;
+  const token = process.env.OPENCLAW_GATEWAY_TOKEN?.trim();
+  const password = process.env.OPENCLAW_GATEWAY_PASSWORD?.trim();
+
+  // Keep the SSH tunnel open while local `openclaw tui` runs so the macOS completion chime
+  // (Funk by default) can play when an agent reply finalizes.
+  const ssh = spawn(
+    "ssh",
+    [
+      ...params.sshOpts,
+      "-o",
+      "ExitOnForwardFailure=yes",
+      "-L",
+      `${localPort}:127.0.0.1:18789`,
+      params.target,
+      "-N",
+    ],
+    { stdio: "inherit" },
+  );
+
+  if (ssh.pid === undefined) {
+    console.error("[openclaw] droplet: failed to start SSH tunnel");
+    process.exit(1);
+  }
+
+  const tuiArgv = [
+    "tui",
+    "--url",
+    url,
+    ...(token ? ["--token", token] : []),
+    ...(password ? ["--password", password] : []),
+    ...params.forward.slice(1),
+  ];
+
+  try {
+    // Run local TUI (interactive).
+    const env = { ...process.env };
+    // Droplet-exclusive: ensure the macOS completion sound is enabled for the tunneled TUI,
+    // even if the user disabled it for local gateway runs.
+    delete env.OPENCLAW_TUI_COMPLETION_SOUND;
+    delete env.OPENCLAW_COMPLETION_SOUND;
+    env.OPENCLAW_TUI_COMPLETION_SOUND = "1";
+    env.OPENCLAW_DROPLET_COMPLETION_SOUND = "1";
+    env.OPENCLAW_DROPLET_COMPLETION_SOUND_NAME =
+      env.OPENCLAW_DROPLET_COMPLETION_SOUND_NAME || "Funk";
+    const local = spawnSync("openclaw", tuiArgv, { stdio: "inherit", env });
+    if (local.error) {
+      console.error("[openclaw] droplet: failed to run local tui:", local.error.message);
+      process.exit(1);
+    }
+    process.exit(local.status ?? 1);
+  } finally {
+    ssh.kill("SIGTERM");
+  }
+}
 
 /**
  * Global npm installs may not yet include `~/openclaw/.env` in the main CLI dotenv pass.
@@ -334,8 +408,6 @@ export function tryHandleDropletRemoteCli(argv: string[]): boolean {
     );
   }
 
-  refreshDropletLocalSudoGate();
-
   let sshOpts: string[];
   try {
     sshOpts = buildDropletSshClientOptions(process.env);
@@ -344,6 +416,12 @@ export function tryHandleDropletRemoteCli(argv: string[]): boolean {
     process.exit(2);
     return true;
   }
+
+  if (forward[0] === "tui" && process.platform === "darwin") {
+    runDropletLocalTuiViaSshTunnel({ target, sshOpts, forward });
+  }
+
+  refreshDropletLocalSudoGate();
 
   const remoteLine = buildDropletRemoteBashLcLine(remoteBin, forward);
   const sshRemoteArgv = buildDropletRemoteSshShellCommand(remoteLine, {

@@ -77,6 +77,26 @@ export async function executePreparedCliRun(
 ): Promise<CliOutput> {
   const params = context.params;
   const backend = context.preparedBackend.backend;
+  if (context.backendResolved.id === "claude-cli") {
+    // Anthropic's consumer terms prohibit accessing Claude (non-API-key) via automated/non-human means.
+    // OpenClaw runs are inherently automated; keep an explicit opt-in so operators don't accidentally
+    // get accounts banned while experimenting with the Claude Code CLI backend.
+    if (process.env.OPENCLAW_ALLOW_CLAUDE_CLI_AUTOMATION?.trim() !== "1") {
+      throw new FailoverError(
+        [
+          "Claude CLI automation blocked by OpenClaw policy.",
+          "Set OPENCLAW_ALLOW_CLAUDE_CLI_AUTOMATION=1 to override (you are responsible for Anthropic ToS/Usage Policy compliance).",
+          "Recommended: use the Anthropic API provider instead of consumer Claude for automated agents.",
+        ].join(" "),
+        {
+          reason: "unknown",
+          provider: params.provider,
+          model: context.modelId,
+          status: resolveFailoverStatus("unknown"),
+        },
+      );
+    }
+  }
   const { sessionId: resolvedSessionId, isNew } = resolveSessionIdToSend({
     backend,
     cliSessionId: cliSessionIdToUse,

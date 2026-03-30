@@ -12,6 +12,8 @@ Docs: https://docs.openclaw.ai
 - Droplet helpers: share a single sudo gate with **one** `sudo -v` (removed `sudo -n -v` prefix that could double-prompt on macOS), run the sync script gate only after local env/SSH options validate, and allow `OPENCLAW_DROPLET_SUDO_GATE=0` for automation; `openclaw … droplet` matches.
 - LINE/outbound media: add LINE image, video, and audio outbound sends on the LINE-specific delivery path, including explicit preview/tracking handling for videos while keeping generic media sends on the existing image-only route. (#45826) Thanks @masatohoshino.
 - Agents/config: merge **TPM-aware** compaction defaults when unset (**safeguard** mode, tighter **`maxHistoryShare`**, tool-result headroom, **`contextTokens` cap** 200k on large-window models) and lower default **agent/subagent concurrency** (2/2). Override in `openclaw.json` for deeper history or higher parallelism.
+- CLI/droplet: **`openclaw tui droplet`** runs the TUI locally via an SSH tunnel so the macOS completion chime can play on each reply; optional **`OPENCLAW_DROPLET_TUI_FORWARD_PORT`** selects the local forward port.
+- Agents/CLI backends: automated **`claude-cli`** runs require **`OPENCLAW_ALLOW_CLAUDE_CLI_AUTOMATION=1`** (Anthropic consumer ToS); use the Anthropic API provider for unattended agents.
 
 ### Fixes
 

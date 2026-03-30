@@ -8,6 +8,7 @@ vi.mock("node:child_process", async (importOriginal) => {
   const real = mod.spawnSync.bind(mod);
   return {
     ...mod,
+    spawn: vi.fn(() => ({ pid: 123, kill: vi.fn() })) as unknown as typeof mod.spawn,
     spawnSync: vi.fn(
       (
         command: string,
@@ -18,6 +19,26 @@ vi.mock("node:child_process", async (importOriginal) => {
           return {
             status: 0,
             pid: 1,
+            output: [] as Array<Buffer | null>,
+            stdout: Buffer.alloc(0),
+            stderr: Buffer.alloc(0),
+            signal: null,
+          };
+        }
+        if (command === "openclaw") {
+          return {
+            status: 0,
+            pid: 2,
+            output: [] as Array<Buffer | null>,
+            stdout: Buffer.alloc(0),
+            stderr: Buffer.alloc(0),
+            signal: null,
+          };
+        }
+        if (command === "ssh") {
+          return {
+            status: 0,
+            pid: 3,
             output: [] as Array<Buffer | null>,
             stdout: Buffer.alloc(0),
             stderr: Buffer.alloc(0),
@@ -44,6 +65,7 @@ import {
   isTrailingDropletRemoteInvocation,
   stripTrailingDroplet,
   tryLoadDropletIpFromHomeCheckoutEnv,
+  tryHandleDropletRemoteCli,
 } from "./droplet-remote.js";
 
 const mockedSpawnSync = vi.mocked(childProcess.spawnSync);
@@ -372,5 +394,47 @@ describe("buildDropletRemoteBashLcLine", () => {
       OPENCLAW_GATEWAY_TOKEN: "abc",
     } as NodeJS.ProcessEnv);
     expect(line).toMatch(/^export OPENCLAW_GATEWAY_TOKEN='abc'; export PATH=/);
+  });
+});
+
+describe("tryHandleDropletRemoteCli (tui droplet)", () => {
+  const originalPlatform = process.platform;
+
+  afterEach(() => {
+    Object.defineProperty(process, "platform", { value: originalPlatform });
+    delete process.env.DROPLET_IP;
+    delete process.env.SSH_USER;
+    delete process.env.OPENCLAW_GATEWAY_TOKEN;
+    delete process.env.OPENCLAW_DROPLET_TUI_FORWARD_PORT;
+    vi.restoreAllMocks();
+    mockedSpawnSync.mockClear();
+  });
+
+  it("runs local tui (so completion chime can play)", () => {
+    Object.defineProperty(process, "platform", { value: "darwin" });
+    process.env.DROPLET_IP = "203.0.113.10";
+    process.env.SSH_USER = "root";
+    process.env.OPENCLAW_GATEWAY_TOKEN = "tok";
+    process.env.OPENCLAW_DROPLET_TUI_FORWARD_PORT = "18791";
+    process.env.OPENCLAW_DROPLET_SUDO_GATE = "0";
+
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code ?? "unknown"})`);
+    }) as never);
+
+    expect(() =>
+      tryHandleDropletRemoteCli(["node", "openclaw", "tui", "--session", "main", "droplet"]),
+    ).toThrow(/process\.exit/);
+
+    // Local TUI invocation.
+    expect(mockedSpawnSync).toHaveBeenCalledWith(
+      "openclaw",
+      expect.arrayContaining(["tui", "--url", "ws://127.0.0.1:18791", "--session", "main"]),
+      expect.objectContaining({
+        stdio: "inherit",
+        env: expect.any(Object),
+      }),
+    );
+    expect(exitSpy).toHaveBeenCalled();
   });
 });
