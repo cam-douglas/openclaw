@@ -131,6 +131,26 @@ When chat exec approvals are enabled, use batch approvals for multi-step flows:
 
 `/approve-batch` is different from `/approve <id> allow-always`.
 
+### Device pairing: TUI shows pairing required but `devices list` is empty
+
+If **`openclaw tui droplet`** reports **pairing required** but on the VPS **`openclaw devices approve --latest`** says **no pending** and **`openclaw devices list`** shows **no device pairing entries**, the CLI is usually calling a **different gateway** than the one bound to **`127.0.0.1:18789`**. That happens when **`gateway.mode`** is **`remote`** and **`gateway.remote.url`** points at another host (the default `openclaw devices …` path follows that URL, not the local listener).
+
+Check:
+
+```bash
+openclaw config get gateway.mode
+openclaw config get gateway.remote.url
+```
+
+Approve against the **local** gateway explicitly (use the same token/password the gateway expects — often from **`gateway.auth`** or your gateway secrets env, not your API keys):
+
+```bash
+openclaw devices list --url ws://127.0.0.1:18789 --token "$OPENCLAW_GATEWAY_TOKEN"
+openclaw devices approve --latest --url ws://127.0.0.1:18789 --token "$OPENCLAW_GATEWAY_TOKEN"
+```
+
+If you intend the gateway to run **only on this droplet**, set **`gateway.mode`** to **`local`** so CLI defaults match the running service. See also [Gateway troubleshooting](/gateway/troubleshooting) (pairing and remote mode).
+
 ### Privileged changes and sudo cache
 
 For work that requires `sudo` on the droplet, avoid leaving a reusable sudo grace window in the shell. After privileged OpenClaw or system commands, run `sudo -k` to clear the cached credential, or use the helper from a repo checkout:

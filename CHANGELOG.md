@@ -6,6 +6,7 @@ Docs: https://docs.openclaw.ai
 
 ### Changes
 
+- Docs: explain empty **`openclaw devices list`** when **`gateway.mode=remote`** points at a different host than the local gateway; use **`--url ws://127.0.0.1:18789`** (and token) on the VPS, or set **`gateway.mode=local`** when the gateway runs only there (DigitalOcean platform guide and gateway troubleshooting).
 - macOS completion chime: support **`OPENCLAW_COMPLETION_SOUND_NAME`** / **`OPENCLAW_DROPLET_COMPLETION_SOUND_NAME`** (default **Funk**); aliases **`funky`** and **`funk`** map to the **Funk** system sound file.
 - macOS/TUI: play the same Funk completion chime when a TUI chat run finishes (local `openclaw tui` to any gateway, including a droplet); optional `OPENCLAW_TUI_COMPLETION_SOUND=0` or global `OPENCLAW_COMPLETION_SOUND=0`.
 - Droplet/macOS: after `openclaw … droplet` SSH completes, play the system sound Funk by default (`OPENCLAW_DROPLET_COMPLETION_SOUND=0` to disable; optional path and success-only env vars).

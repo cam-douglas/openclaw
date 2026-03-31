@@ -358,6 +358,12 @@ What to check:
 
 - Pending device approvals for dashboard/nodes.
 - Pending DM pairing approvals after policy or identity changes.
+- **Empty `devices list` but clients still see pairing required:** if **`gateway.mode=remote`**, CLI RPCs use **`gateway.remote.url`**, which may be a **different** host than the gateway you are connecting to (for example a tunnel to **`127.0.0.1:18789`** on a VPS). List and approve against the **same** URL the client uses, for example:
+
+```bash
+openclaw devices list --url ws://127.0.0.1:18789 --token "$OPENCLAW_GATEWAY_TOKEN"
+openclaw devices approve --latest --url ws://127.0.0.1:18789 --token "$OPENCLAW_GATEWAY_TOKEN"
+```
 
 Common signatures:
 
