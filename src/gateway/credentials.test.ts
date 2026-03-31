@@ -134,6 +134,45 @@ describe("resolveGatewayCredentialsFromConfig", () => {
     expect(resolved).toEqual({});
   });
 
+  it("reuses local credentials when cli url override matches config loopback target", () => {
+    const resolved = resolveGatewayCredentialsFor(
+      {
+        mode: "local",
+        auth: { token: "loopback-token", password: "loopback-password" }, // pragma: allowlist secret
+      },
+      {
+        urlOverride: "ws://127.0.0.1:18789",
+      },
+    );
+    expect(resolved).toEqual({
+      token: "env-token",
+      password: "env-password", // pragma: allowlist secret
+    });
+  });
+
+  it("uses local gateway auth for loopback cli override when remote mode points elsewhere", () => {
+    const resolved = resolveGatewayCredentialsFromConfig({
+      cfg: cfg({
+        gateway: {
+          mode: "remote",
+          remote: {
+            url: "wss://cloud.example/ws",
+            token: "remote-token", // pragma: allowlist secret
+            password: "remote-password", // pragma: allowlist secret
+          },
+          auth: { token: "local-token", password: "local-password" }, // pragma: allowlist secret
+        },
+      }),
+      env: {} as NodeJS.ProcessEnv,
+      urlOverride: "ws://127.0.0.1:18789",
+      urlOverrideSource: "cli",
+    });
+    expect(resolved).toEqual({
+      token: "local-token",
+      password: "local-password", // pragma: allowlist secret
+    });
+  });
+
   it("uses env credentials for env-sourced url overrides", () => {
     const resolved = resolveGatewayCredentialsFor(
       {

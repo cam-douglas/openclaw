@@ -120,6 +120,23 @@ describe("resolveGatewayConnection", () => {
     );
   });
 
+  it("allows cli url override matching local loopback without explicit credentials when local auth is configured", async () => {
+    loadConfig.mockReturnValue({
+      gateway: { mode: "local", auth: { token: "config-token" } },
+    });
+
+    const result = await resolveGatewayConnection({
+      url: "ws://127.0.0.1:18789",
+    });
+
+    expect(result).toEqual({
+      url: "ws://127.0.0.1:18789",
+      token: "config-token",
+      password: undefined,
+      allowInsecureLocalOperatorUi: false,
+    });
+  });
+
   it.each([
     {
       label: "token",

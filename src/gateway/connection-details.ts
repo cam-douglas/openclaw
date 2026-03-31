@@ -110,3 +110,23 @@ export function buildGatewayConnectionDetailsWithResolvers(
     message,
   };
 }
+
+/**
+ * WebSocket URLs implied by config only (no CLI/env URL overrides).
+ * Used to decide whether a `--url` override targets the same gateway as the default connection.
+ */
+export function resolveConfigGatewayWebSocketTarget(
+  config: OpenClawConfig,
+  env: NodeJS.ProcessEnv = process.env,
+): { configDefaultUrl: string; localLoopbackUrl: string } {
+  const isRemoteMode = config.gateway?.mode === "remote";
+  const remote = isRemoteMode ? config.gateway?.remote : undefined;
+  const tlsEnabled = config.gateway?.tls?.enabled === true;
+  const localPort = resolveGatewayPort(config, env);
+  const scheme = tlsEnabled ? "wss" : "ws";
+  const localLoopbackUrl = `${scheme}://127.0.0.1:${localPort}`;
+  const remoteUrl =
+    typeof remote?.url === "string" && remote.url.trim().length > 0 ? remote.url.trim() : undefined;
+  const configDefaultUrl = remoteUrl || localLoopbackUrl;
+  return { configDefaultUrl, localLoopbackUrl };
+}

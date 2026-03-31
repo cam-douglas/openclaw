@@ -142,11 +142,11 @@ openclaw config get gateway.mode
 openclaw config get gateway.remote.url
 ```
 
-Approve against the **local** gateway explicitly (use the same token/password the gateway expects — often from **`gateway.auth`** or your gateway secrets env, not your API keys):
+Approve against the **local** gateway explicitly. When **`--url`** matches that listener (same port as **`gateway.port`**, usually **`18789`**), the CLI reuses credentials from **`gateway.auth`** / **`gateway.remote`** / env (you do not need **`--token`** unless you are overriding credentials). Otherwise pass **`--token`** or **`--password`** explicitly.
 
 ```bash
-openclaw devices list --url ws://127.0.0.1:18789 --token "$OPENCLAW_GATEWAY_TOKEN"
-openclaw devices approve --latest --url ws://127.0.0.1:18789 --token "$OPENCLAW_GATEWAY_TOKEN"
+openclaw devices list --url ws://127.0.0.1:18789
+openclaw devices approve --latest --url ws://127.0.0.1:18789
 ```
 
 If you intend the gateway to run **only on this droplet**, set **`gateway.mode`** to **`local`** so CLI defaults match the running service. See also [Gateway troubleshooting](/gateway/troubleshooting) (pairing and remote mode).

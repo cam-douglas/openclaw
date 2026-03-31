@@ -219,19 +219,18 @@ export function ensureExplicitGatewayAuth(params: {
     return;
   }
   // URL overrides are untrusted redirects and can move WebSocket traffic off the intended host.
-  // Never allow an override to silently reuse implicit credentials or device token fallback.
+  // Config-derived credentials are only allowed when the override matches a trusted URL
+  // (see resolveGatewayCredentialsFromConfig); otherwise require explicit --token/--password.
   const explicitToken = params.explicitAuth?.token;
   const explicitPassword = params.explicitAuth?.password;
-  if (params.urlOverrideSource === "cli" && (explicitToken || explicitPassword)) {
-    return;
-  }
   const hasResolvedAuth =
     params.resolvedAuth?.token ||
     params.resolvedAuth?.password ||
     explicitToken ||
     explicitPassword;
-  // Env overrides are supported for deployment ergonomics, but only when explicit auth is available.
-  // This avoids implicit device-token fallback against attacker-controlled WSS endpoints.
+  if (params.urlOverrideSource === "cli" && hasResolvedAuth) {
+    return;
+  }
   if (params.urlOverrideSource === "env" && hasResolvedAuth) {
     return;
   }

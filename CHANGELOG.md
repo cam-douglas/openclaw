@@ -6,7 +6,7 @@ Docs: https://docs.openclaw.ai
 
 ### Changes
 
-- Docs: explain empty **`openclaw devices list`** when **`gateway.mode=remote`** points at a different host than the local gateway; use **`--url ws://127.0.0.1:18789`** (and token) on the VPS, or set **`gateway.mode=local`** when the gateway runs only there (DigitalOcean platform guide and gateway troubleshooting).
+- Docs: explain empty **`openclaw devices list`** when **`gateway.mode=remote`** points at a different host than the local gateway; use **`--url ws://127.0.0.1:18789`** on the VPS (or set **`gateway.mode=local`** when the gateway runs only there); see DigitalOcean platform guide and gateway troubleshooting.
 - macOS completion chime: support **`OPENCLAW_COMPLETION_SOUND_NAME`** / **`OPENCLAW_DROPLET_COMPLETION_SOUND_NAME`** (default **Funk**); aliases **`funky`** and **`funk`** map to the **Funk** system sound file.
 - macOS/TUI: play the same Funk completion chime when a TUI chat run finishes (local `openclaw tui` to any gateway, including a droplet); optional `OPENCLAW_TUI_COMPLETION_SOUND=0` or global `OPENCLAW_COMPLETION_SOUND=0`.
 - Droplet/macOS: after `openclaw … droplet` SSH completes, play the system sound Funk by default (`OPENCLAW_DROPLET_COMPLETION_SOUND=0` to disable; optional path and success-only env vars).
@@ -19,6 +19,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- CLI/TUI: gateway **`--url`** overrides that match the configured default gateway URL or the local loopback target (**`ws://127.0.0.1:<port>`** / **`wss://`** per **`gateway.tls`**) reuse **`gateway.auth`** / **`gateway.remote`** credentials from config or env; unrelated URLs still require explicit **`--token`** / **`--password`**.
 - macOS/droplet: **`openclaw tui droplet`** no longer fails when the default local SSH forward port (**18790**) is already in use (often the local bridge); the CLI **picks the next free** port unless **`OPENCLAW_DROPLET_TUI_FORWARD_PORT`** is set explicitly.
 - macOS/droplet: SSH **`LogLevel=QUIET`** for **`openclaw tui droplet`** and **`droplet-tunnel.sh`** so OpenSSH does not flood the terminal with **`channel … open failed: Connection refused`** when the remote gateway is down.
 - macOS/droplet: stop printing a warning when the default local tunnel port is busy and the next free port is chosen automatically.

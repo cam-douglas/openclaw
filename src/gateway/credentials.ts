@@ -1,4 +1,5 @@
 import type { OpenClawConfig } from "../config/config.js";
+import { resolveConfigGatewayWebSocketTarget } from "./connection-details.js";
 import {
   createGatewayCredentialPlan,
   type GatewayCredentialPlan,
@@ -7,6 +8,7 @@ import {
   trimCredentialToUndefined,
   trimToUndefined,
 } from "./credential-planner.js";
+import { gatewayWebSocketUrlsMatchForCredentials } from "./net.js";
 export {
   hasGatewayPasswordEnvCandidate,
   hasGatewayTokenEnvCandidate,
@@ -266,7 +268,27 @@ export function resolveGatewayCredentialsFromConfig(params: {
   if (explicitToken || explicitPassword) {
     return { token: explicitToken, password: explicitPassword };
   }
-  if (trimToUndefined(params.urlOverride) && params.urlOverrideSource !== "env") {
+  const cliOverride = trimToUndefined(params.urlOverride);
+  if (cliOverride && params.urlOverrideSource !== "env") {
+    const { configDefaultUrl, localLoopbackUrl } = resolveConfigGatewayWebSocketTarget(
+      params.cfg,
+      env,
+    );
+    if (gatewayWebSocketUrlsMatchForCredentials(cliOverride, configDefaultUrl)) {
+      return resolveGatewayCredentialsFromConfig({
+        ...params,
+        urlOverride: undefined,
+        urlOverrideSource: undefined,
+      });
+    }
+    if (gatewayWebSocketUrlsMatchForCredentials(cliOverride, localLoopbackUrl)) {
+      return resolveGatewayCredentialsFromConfig({
+        ...params,
+        urlOverride: undefined,
+        urlOverrideSource: undefined,
+        modeOverride: "local",
+      });
+    }
     return {};
   }
   if (trimToUndefined(params.urlOverride) && params.urlOverrideSource === "env") {

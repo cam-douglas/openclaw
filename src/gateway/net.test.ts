@@ -2,6 +2,7 @@ import os from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeNetworkInterfacesSnapshot } from "../test-helpers/network-interfaces.js";
 import {
+  gatewayWebSocketUrlsMatchForCredentials,
   isLocalishHost,
   isPrivateOrLoopbackAddress,
   isPrivateOrLoopbackHost,
@@ -21,6 +22,26 @@ describe("resolveHostName", () => {
     { input: "::1", expected: "::1" },
   ] as const)("normalizes host form for $input", ({ input, expected }) => {
     expect(resolveHostName(input), input).toBe(expected);
+  });
+});
+
+describe("gatewayWebSocketUrlsMatchForCredentials", () => {
+  it("matches equivalent loopback hosts and rejects scheme or port drift", () => {
+    expect(
+      gatewayWebSocketUrlsMatchForCredentials("ws://127.0.0.1:18789", "ws://localhost:18789"),
+    ).toBe(true);
+    expect(
+      gatewayWebSocketUrlsMatchForCredentials("ws://[::1]:18789", "ws://127.0.0.1:18789"),
+    ).toBe(true);
+    expect(
+      gatewayWebSocketUrlsMatchForCredentials("ws://127.0.0.1:18789", "wss://127.0.0.1:18789"),
+    ).toBe(false);
+    expect(
+      gatewayWebSocketUrlsMatchForCredentials("ws://127.0.0.1:18789", "ws://127.0.0.1:18790"),
+    ).toBe(false);
+    expect(
+      gatewayWebSocketUrlsMatchForCredentials("ws://127.0.0.1:18789", "ws://example.com:18789"),
+    ).toBe(false);
   });
 });
 

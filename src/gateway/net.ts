@@ -349,6 +349,34 @@ export function isLoopbackHost(host: string): boolean {
 }
 
 /**
+ * Compare two ws/wss URLs for gateway credential routing: same scheme and port,
+ * and hosts that refer to the same endpoint (including loopback aliases like
+ * 127.0.0.1 vs localhost vs ::1).
+ */
+export function gatewayWebSocketUrlsMatchForCredentials(a: string, b: string): boolean {
+  let urlA: URL;
+  let urlB: URL;
+  try {
+    urlA = new URL(a);
+    urlB = new URL(b);
+  } catch {
+    return false;
+  }
+  if (urlA.protocol !== urlB.protocol) {
+    return false;
+  }
+  if (urlA.port !== urlB.port) {
+    return false;
+  }
+  const hostA = urlA.hostname;
+  const hostB = urlB.hostname;
+  if (hostA === hostB) {
+    return true;
+  }
+  return isLoopbackHost(hostA) && isLoopbackHost(hostB);
+}
+
+/**
  * Local-facing host check for inbound requests:
  * - loopback hosts (localhost/127.x/::1 and mapped forms)
  * - Tailscale Serve/Funnel hostnames (*.ts.net)

@@ -6,6 +6,7 @@ import {
   buildGatewayConnectionDetails,
   ensureExplicitGatewayAuth,
   resolveExplicitGatewayAuth,
+  resolveGatewayCredentialsWithSecretInputs,
 } from "../gateway/call.js";
 import { GatewayClient } from "../gateway/client.js";
 import { isLoopbackHost } from "../gateway/net.js";
@@ -284,10 +285,20 @@ export async function resolveGatewayConnection(
   const urlOverride =
     typeof opts.url === "string" && opts.url.trim().length > 0 ? opts.url.trim() : undefined;
   const explicitAuth = resolveExplicitGatewayAuth({ token: opts.token, password: opts.password });
+  const resolvedCredentials = urlOverride
+    ? await resolveGatewayCredentialsWithSecretInputs({
+        config,
+        explicitAuth,
+        urlOverride,
+        urlOverrideSource: "cli",
+        env,
+      })
+    : {};
   ensureExplicitGatewayAuth({
     urlOverride,
-    urlOverrideSource: "cli",
+    urlOverrideSource: urlOverride ? "cli" : undefined,
     explicitAuth,
+    resolvedAuth: resolvedCredentials,
     errorHint: "Fix: pass --token or --password when using --url.",
   });
   const url = buildGatewayConnectionDetails({
@@ -308,8 +319,8 @@ export async function resolveGatewayConnection(
   if (urlOverride) {
     return {
       url,
-      token: explicitAuth.token,
-      password: explicitAuth.password,
+      token: explicitAuth.token ?? resolvedCredentials.token,
+      password: explicitAuth.password ?? resolvedCredentials.password,
       allowInsecureLocalOperatorUi,
     };
   }
