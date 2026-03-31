@@ -122,11 +122,6 @@ function runDropletLocalTuiViaSshTunnel(params: {
       );
       process.exit(1);
     }
-    if (!cfg.explicit && firstFree !== cfg.preferred) {
-      console.warn(
-        `[openclaw] Local port ${cfg.preferred} is in use (often the bridge uses ${cfg.preferred}). Using ${firstFree} for the SSH tunnel. Set OPENCLAW_DROPLET_TUI_FORWARD_PORT to pin a port.`,
-      );
-    }
     localPort = firstFree;
   } catch (err) {
     console.error(err instanceof Error ? err.message : err);
