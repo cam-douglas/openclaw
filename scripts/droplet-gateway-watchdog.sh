@@ -77,7 +77,10 @@ if ! flock -n 9; then
 fi
 
 if [[ ! -S "${XDG_RUNTIME_DIR}/bus" ]]; then
-  log_msg "user dbus not available (${XDG_RUNTIME_DIR}/bus missing); skip"
+  if command -v loginctl >/dev/null 2>&1; then
+    loginctl enable-linger root >/dev/null 2>&1 || true
+  fi
+  log_msg "user dbus not available (${XDG_RUNTIME_DIR}/bus missing); cannot manage systemd --user gateway (enable lingering for root)"
   exit 0
 fi
 

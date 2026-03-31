@@ -41,6 +41,13 @@ install -m 644 "$TIMER_SRC" /etc/systemd/system/openclaw-gateway-watchdog.timer
 systemctl daemon-reload
 systemctl enable --now openclaw-gateway-watchdog.timer
 
+# The gateway runs as root's systemd --user unit. Ensure root's user manager is
+# available after reboot even when no interactive session is active, otherwise
+# the watchdog cannot issue `systemctl --user restart ...`.
+if command -v loginctl >/dev/null 2>&1; then
+  loginctl enable-linger root >/dev/null 2>&1 || true
+fi
+
 # Avoid running the watchdog twice (timer + cron).
 if [[ -f /etc/cron.d/openclaw-gateway-watchdog ]]; then
   rm -f /etc/cron.d/openclaw-gateway-watchdog
