@@ -2,6 +2,7 @@ import { cancel, confirm, isCancel } from "@clack/prompts";
 import { formatCliCommand } from "../cli/command-format.js";
 import { isNixMode } from "../config/config.js";
 import { resolveGatewayService } from "../daemon/service.js";
+import { isNonFatalSystemdInstallProbeError } from "../daemon/systemd.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { selectStyled } from "../terminal/prompt-select-styled.js";
 import { stylePromptMessage, stylePromptTitle } from "../terminal/prompt-style.js";
@@ -31,8 +32,12 @@ async function stopGatewayIfRunning(runtime: RuntimeEnv) {
   try {
     loaded = await service.isLoaded({ env: process.env });
   } catch (err) {
-    runtime.error(`Gateway service check failed: ${String(err)}`);
-    return;
+    if (isNonFatalSystemdInstallProbeError(err)) {
+      loaded = false;
+    } else {
+      runtime.error(`Gateway service check failed: ${String(err)}`);
+      return;
+    }
   }
   if (!loaded) {
     return;

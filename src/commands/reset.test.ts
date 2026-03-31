@@ -6,6 +6,8 @@ const removePath = vi.fn();
 const listAgentSessionDirs = vi.fn();
 const removeStateAndLinkedPaths = vi.fn();
 const removeWorkspaceDirs = vi.fn();
+const serviceIsLoaded = vi.fn();
+const serviceStop = vi.fn();
 
 vi.mock("../config/config.js", () => ({
   isNixMode: false,
@@ -20,6 +22,14 @@ vi.mock("./cleanup-utils.js", () => ({
   listAgentSessionDirs,
   removeStateAndLinkedPaths,
   removeWorkspaceDirs,
+}));
+
+vi.mock("../daemon/service.js", () => ({
+  resolveGatewayService: () => ({
+    isLoaded: serviceIsLoaded,
+    stop: serviceStop,
+    notLoadedText: "is not installed",
+  }),
 }));
 
 const { resetCommand } = await import("./reset.js");
@@ -41,6 +51,10 @@ describe("resetCommand", () => {
     listAgentSessionDirs.mockResolvedValue(["/tmp/.openclaw/agents/main/sessions"]);
     removeStateAndLinkedPaths.mockResolvedValue(undefined);
     removeWorkspaceDirs.mockResolvedValue(undefined);
+    serviceIsLoaded.mockReset();
+    serviceStop.mockReset();
+    serviceIsLoaded.mockResolvedValue(false);
+    serviceStop.mockResolvedValue(undefined);
     vi.spyOn(runtime, "log").mockImplementation(() => {});
     vi.spyOn(runtime, "error").mockImplementation(() => {});
   });
@@ -65,5 +79,23 @@ describe("resetCommand", () => {
     });
 
     expect(runtime.log).not.toHaveBeenCalledWith(expect.stringContaining("openclaw backup create"));
+  });
+
+  it("treats non-fatal systemd bus errors as not-loaded during stop checks", async () => {
+    serviceIsLoaded.mockRejectedValueOnce(
+      new Error("systemctl is-enabled unavailable: Failed to connect to bus: No medium found"),
+    );
+
+    await resetCommand(runtime, {
+      scope: "config+creds+sessions",
+      yes: true,
+      nonInteractive: true,
+      dryRun: false,
+    });
+
+    expect(runtime.error).not.toHaveBeenCalledWith(
+      expect.stringContaining("Gateway service check failed"),
+    );
+    expect(serviceStop).not.toHaveBeenCalled();
   });
 });

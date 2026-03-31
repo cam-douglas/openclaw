@@ -3,6 +3,7 @@ import { cancel, confirm, isCancel, multiselect } from "@clack/prompts";
 import { formatCliCommand } from "../cli/command-format.js";
 import { isNixMode } from "../config/config.js";
 import { resolveGatewayService } from "../daemon/service.js";
+import { isNonFatalSystemdInstallProbeError } from "../daemon/systemd.js";
 import type { RuntimeEnv } from "../runtime.js";
 import { stylePromptHint, stylePromptMessage, stylePromptTitle } from "../terminal/prompt-style.js";
 import { resolveHomeDir } from "../utils.js";
@@ -62,8 +63,12 @@ async function stopAndUninstallService(runtime: RuntimeEnv): Promise<boolean> {
   try {
     loaded = await service.isLoaded({ env: process.env });
   } catch (err) {
-    runtime.error(`Gateway service check failed: ${String(err)}`);
-    return false;
+    if (isNonFatalSystemdInstallProbeError(err)) {
+      loaded = false;
+    } else {
+      runtime.error(`Gateway service check failed: ${String(err)}`);
+      return false;
+    }
   }
   if (!loaded) {
     runtime.log(`Gateway service ${service.notLoadedText}.`);
