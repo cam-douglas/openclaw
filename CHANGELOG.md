@@ -19,6 +19,7 @@ Docs: https://docs.openclaw.ai
 
 ### Fixes
 
+- Gateway client: WebSocket close code **1006** with an empty reason now includes the last transport error when available (for example **ECONNREFUSED**), with a hint to check that the gateway is running when nothing is listening on the target host/port.
 - CLI/TUI: gateway **`--url`** overrides that match the configured default gateway URL or the local loopback target (**`ws://127.0.0.1:<port>`** / **`wss://`** per **`gateway.tls`**) reuse **`gateway.auth`** / **`gateway.remote`** credentials from config or env; unrelated URLs still require explicit **`--token`** / **`--password`**.
 - macOS/droplet: **`openclaw tui droplet`** no longer fails when the default local SSH forward port (**18790**) is already in use (often the local bridge); the CLI **picks the next free** port unless **`OPENCLAW_DROPLET_TUI_FORWARD_PORT`** is set explicitly.
 - macOS/droplet: SSH **`LogLevel=QUIET`** for **`openclaw tui droplet`** and **`droplet-tunnel.sh`** so OpenSSH does not flood the terminal with **`channel … open failed: Connection refused`** when the remote gateway is down.

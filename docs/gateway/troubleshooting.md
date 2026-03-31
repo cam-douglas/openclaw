@@ -367,6 +367,8 @@ openclaw devices approve --latest --url ws://127.0.0.1:18789
 
 Add **`--token`** / **`--password`** only when the URL does not match your configured default gateway or local loopback and you must supply credentials out of band.
 
+- **`gateway closed (1006)`** with **`--url ws://127.0.0.1:18789`** is often a **failed TCP connect** (nothing listening yet — for example the gateway is still running **Control UI** build on first start — or a **stuck stop** after **`systemctl --user restart`**). Check **`ss -ltnp | grep 18789`** and **`journalctl --user -u openclaw-gateway.service`**. If the unit stays in **`deactivating`**, use **`systemctl --user kill -s SIGKILL openclaw-gateway.service`** then **`systemctl --user start openclaw-gateway.service`**.
+
 Common signatures:
 
 - `device identity required` → device auth not satisfied.

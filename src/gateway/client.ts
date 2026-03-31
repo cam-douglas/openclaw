@@ -165,6 +165,8 @@ export class GatewayClient {
   private pendingDeviceTokenRetry = false;
   private deviceTokenRetryBudgetUsed = false;
   private pendingConnectErrorDetailCode: string | null = null;
+  /** Set when the transport emits `error` before close; improves 1006 diagnostics. */
+  private lastTransportError: Error | null = null;
   // Track last tick to detect silent stalls.
   private lastTick: number | null = null;
   private tickIntervalMs = 30_000;
@@ -190,6 +192,7 @@ export class GatewayClient {
     if (this.closed) {
       return;
     }
+    this.lastTransportError = null;
     const url = this.opts.url ?? "ws://127.0.0.1:18789";
     if (this.opts.tlsFingerprint && !url.startsWith("wss://")) {
       this.opts.onConnectError?.(new Error("gateway tls fingerprint requires wss:// gateway url"));
@@ -265,7 +268,16 @@ export class GatewayClient {
     });
     ws.on("message", (data) => this.handleMessage(rawDataToString(data)));
     ws.on("close", (code, reason) => {
-      const reasonText = rawDataToString(reason);
+      let reasonText = rawDataToString(reason);
+      if (code === 1006 && !reasonText.trim() && this.lastTransportError) {
+        const e = this.lastTransportError as NodeJS.ErrnoException;
+        reasonText = e.message || String(e);
+        if (e.code === "ECONNREFUSED") {
+          reasonText +=
+            " (nothing is listening on this address; is the gateway running? Try: systemctl --user status openclaw-gateway.service)";
+        }
+      }
+      this.lastTransportError = null;
       const connectErrorDetailCode = this.pendingConnectErrorDetailCode;
       this.pendingConnectErrorDetailCode = null;
       if (this.ws === ws) {
@@ -303,8 +315,9 @@ export class GatewayClient {
     });
     ws.on("error", (err) => {
       logDebug(`gateway client error: ${String(err)}`);
+      this.lastTransportError = err instanceof Error ? err : new Error(String(err));
       if (!this.connectSent) {
-        this.opts.onConnectError?.(err instanceof Error ? err : new Error(String(err)));
+        this.opts.onConnectError?.(this.lastTransportError);
       }
     });
   }
