@@ -2,6 +2,7 @@
 
 This runbook covers a staged migration from an existing OpenClaw droplet to a new GPU droplet with:
 
+- bundle build (portable transfer artifact)
 - pre-sync inventory and capture
 - cutover sync (including full `/root/.openclaw`)
 - post-sync verification
@@ -39,12 +40,47 @@ This writes migration artifacts under `.droplet/migration/...` including:
 - watchdog unit definitions and recent journal
 - tailscale status summary (if present)
 
-## 2) Sync + cutover to target GPU droplet
+## 2) Build portable migration bundle (recommended)
+
+Run:
+
+```bash
+scripts/droplet-migration-build-bundle.sh
+```
+
+Optional:
+
+```bash
+scripts/droplet-migration-build-bundle.sh --source-host <old-droplet-ip-or-host>
+scripts/droplet-migration-build-bundle.sh --out-dir transfer
+```
+
+Outputs:
+
+- `transfer/openclaw-gpu-migration-<timestamp>.tar.gz`
+- `transfer/openclaw-gpu-migration-<timestamp>/` (exploded manifest directory)
+
+Bundle includes:
+
+- OpenClaw git history bundle (`openclaw-source.bundle`)
+- full `.openclaw` snapshot (`openclaw-state.tar`)
+- runtime/config snapshot (`openclaw-config.tar`)
+- service/watchdog metadata, checksums, and `TRANSFER_README.md`
+
+## 3) Sync + cutover to target GPU droplet
 
 Run:
 
 ```bash
 scripts/droplet-migration-sync.sh --target-host <new-gpu-droplet-ip-or-host>
+```
+
+Bundle mode (use your portable tarball):
+
+```bash
+scripts/droplet-migration-sync.sh \
+  --target-host <new-gpu-droplet-ip-or-host> \
+  --bundle transfer/openclaw-gpu-migration-<timestamp>.tar.gz
 ```
 
 Optional:
@@ -55,7 +91,7 @@ scripts/droplet-migration-sync.sh \
   --source-host <old-droplet-ip-or-host>
 ```
 
-What it does:
+What it does (source-sync mode):
 
 1. Verifies SSH to source and target.
 2. Prepares target checkout (`/root/openclaw` clone/pull).
@@ -73,7 +109,16 @@ What it does:
    - `systemctl --user restart openclaw-gateway.service`
    - `sudo bash scripts/install-droplet-watchdog.sh`
 
-## 3) Post-sync validation
+What it does (bundle mode):
+
+1. Uploads the bundle tarball to target (`/root/transfer/`).
+2. Extracts and restores:
+   - `openclaw-state.tar` -> `/root/.openclaw`
+   - `openclaw-config.tar` -> `/root/.config/openclaw` and user service drop-ins
+3. Bootstraps `/root/openclaw` from `openclaw-source.bundle` when needed.
+4. Runs install/build/restart + watchdog install on target.
+
+## 4) Post-sync validation
 
 Run:
 
