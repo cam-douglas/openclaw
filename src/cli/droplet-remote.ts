@@ -17,6 +17,7 @@ import {
   DEFAULT_OPENCLAW_COMPLETION_SOUND_PATH,
   playMacCompletionChime,
 } from "../infra/mac-completion-chime.js";
+import { findAvailableLocalForwardPortSync } from "./droplet-local-forward-port.js";
 import { buildDropletSshClientOptions } from "./droplet-ssh-options.js";
 
 /** Re-export for compatibility; same path as `DEFAULT_OPENCLAW_COMPLETION_SOUND_PATH`. */
@@ -47,16 +48,20 @@ export function revokeDropletLocalSudoGate(): void {
 /** Alias for `playMacCompletionChime` (see `src/infra/mac-completion-chime.ts`). */
 export const playDropletRemoteCompletionChime = playMacCompletionChime;
 
-function resolveDropletLocalTuiForwardPort(): number {
+/** Default matches historical droplet tunnel; often collides with the local bridge (18790). */
+const DEFAULT_DROPLET_TUI_FORWARD_PORT = 18_790;
+
+function getDropletTuiForwardPortPreference(): { preferred: number; explicit: boolean } {
   const raw = process.env.OPENCLAW_DROPLET_TUI_FORWARD_PORT?.trim();
   if (!raw) {
-    return 18_790;
+    return { preferred: DEFAULT_DROPLET_TUI_FORWARD_PORT, explicit: false };
   }
   const parsed = Number.parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed < 1 || parsed > 65_535) {
-    return 18_790;
+    console.warn(`[openclaw] OPENCLAW_DROPLET_TUI_FORWARD_PORT ignored (invalid): ${raw}`);
+    return { preferred: DEFAULT_DROPLET_TUI_FORWARD_PORT, explicit: false };
   }
-  return parsed;
+  return { preferred: parsed, explicit: true };
 }
 
 /**
@@ -107,7 +112,26 @@ function runDropletLocalTuiViaSshTunnel(params: {
   sshOpts: string[];
   forward: string[];
 }): never {
-  const localPort = resolveDropletLocalTuiForwardPort();
+  const cfg = getDropletTuiForwardPortPreference();
+  let localPort: number;
+  try {
+    const firstFree = findAvailableLocalForwardPortSync(cfg.preferred);
+    if (cfg.explicit && firstFree !== cfg.preferred) {
+      console.error(
+        `[openclaw] OPENCLAW_DROPLET_TUI_FORWARD_PORT=${cfg.preferred} is already in use. Set it to a free port or stop the process using that port.`,
+      );
+      process.exit(1);
+    }
+    if (!cfg.explicit && firstFree !== cfg.preferred) {
+      console.warn(
+        `[openclaw] Local port ${cfg.preferred} is in use (often the bridge uses ${cfg.preferred}). Using ${firstFree} for the SSH tunnel. Set OPENCLAW_DROPLET_TUI_FORWARD_PORT to pin a port.`,
+      );
+    }
+    localPort = firstFree;
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : err);
+    process.exit(1);
+  }
   const url = `ws://127.0.0.1:${localPort}`;
   const token = process.env.OPENCLAW_GATEWAY_TOKEN?.trim();
   const password = process.env.OPENCLAW_GATEWAY_PASSWORD?.trim();
