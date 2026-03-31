@@ -415,9 +415,10 @@ Your systemd user unit should already restart the gateway process when it crashe
 
 Use the repo files (review before install):
 
+- `scripts/install-droplet-watchdog.sh` — **one command** installs the script, systemd units, enables the **timer**, and removes legacy cron if present
 - `scripts/droplet-gateway-watchdog.sh`
 - `scripts/droplet-gateway-watchdog.service` + `scripts/droplet-gateway-watchdog.timer` (preferred schedule)
-- Legacy: root **cron** every 2 minutes (still documented below if you prefer cron)
+- Legacy: root **cron** every 2 minutes (still documented below if you prefer cron; the install script removes it when you switch to the timer)
 
 **Security model**
 
@@ -431,6 +432,14 @@ Use the repo files (review before install):
 - When **`gateway.tailscale.mode`** is **`serve`** (or funnel), OpenClaw coordinates **`tailscale serve`** while the gateway binds **loopback**; the watchdog keeps **`tailscaled`** up so that path can work again after failures.
 
 **Install on the droplet (systemd timer — recommended)**
+
+From a repo checkout on the VPS (default path **`/root/openclaw`**):
+
+```bash
+cd /root/openclaw && git pull --rebase origin main && sudo bash scripts/install-droplet-watchdog.sh
+```
+
+Manual steps (equivalent to the installer):
 
 ```bash
 sudo install -m 750 /root/openclaw/scripts/droplet-gateway-watchdog.sh /usr/local/sbin/openclaw-gateway-watchdog.sh

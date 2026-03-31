@@ -15,7 +15,9 @@
 # Tailscale note: keeps tailscaled running; OpenClaw's `gateway.tailscale.*` is applied by the
 # gateway process when it starts.
 #
-# Typical install:
+# Typical install (preferred — timer + no duplicate cron):
+#   cd /root/openclaw && git pull && sudo bash scripts/install-droplet-watchdog.sh
+# Manual:
 #   sudo install -m 750 scripts/droplet-gateway-watchdog.sh /usr/local/sbin/openclaw-gateway-watchdog.sh
 #   sudo mkdir -p /var/lib/openclaw && sudo chmod 700 /var/lib/openclaw
 #   sudo install -m 644 scripts/droplet-gateway-watchdog.service /etc/systemd/system/
