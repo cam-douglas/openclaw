@@ -248,6 +248,11 @@
 
 - When working on a GitHub Issue or PR, print the full URL at the end of the task.
 - When answering questions, respond with high-confidence answers only: verify in code; do not guess.
+- Execution integrity policy (local + droplet):
+- Never claim an action is completed unless it was actually executed and verified in this session.
+- If you state you are going to run a command/fix/deploy, either run it before the final response or explicitly report it as not completed.
+- For execution tasks, separate completed vs not completed items and include concise evidence (key command/result) for critical claims.
+- If blocked (SSH, permissions, missing dependencies, etc.), report the blocker immediately and stop implying progress on that blocked step.
 - Never update the Carbon dependency.
 - Any dependency with `pnpm.patchedDependencies` must use an exact version (no `^`/`~`).
 - Patching dependencies (pnpm patches, overrides, or vendored changes) requires explicit approval; do not do this by default.
