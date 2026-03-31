@@ -22,8 +22,12 @@ set -a
 source "$ENV_FILE"
 set +a
 
-DROPLET_IP="${DROPLET_IP:?Set DROPLET_IP in $ENV_FILE}"
-TARGET="${SSH_USER:-root}@${DROPLET_IP}"
+if [[ -z "${DROPLET_SSH_HOST:-}" && -z "${DROPLET_IP:-}" ]]; then
+  echo "error: set DROPLET_SSH_HOST or DROPLET_IP in $ENV_FILE" >&2
+  exit 1
+fi
+SSH_HOST="${DROPLET_SSH_HOST:-$DROPLET_IP}"
+TARGET="${SSH_USER:-root}@${SSH_HOST}"
 FORWARD_HOST="${OPENCLAW_DROPLET_SSH_FORWARD_HOST:-127.0.0.1}"
 
 # shellcheck source=scripts/droplet-ssh-common.sh

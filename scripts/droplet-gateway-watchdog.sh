@@ -3,17 +3,24 @@
 #
 # Security properties:
 # - No secrets, no outbound network checks (only curl to 127.0.0.1).
-# - Uses systemd --user for the gateway unit (same as your install); controls tailscaled via system.
+# - Does not invoke `openclaw` CLI or any LLM provider — only systemd + curl + ss.
+# - Uses systemd --user for the gateway unit; controls tailscaled via system.
 # - Rate-limits gateway restarts to avoid restart storms.
 #
-# Tailscale note: this keeps the Tailscale daemon up and the node "logged in" from the OS
-# perspective. OpenClaw's own `gateway.tailscale.mode` (serve/funnel) is applied when the
-# gateway starts; restarting the gateway after Tailscale recovers lets OpenClaw re-run serve.
+# Checks (in order):
+# - systemd --user unit is active
+# - TCP listener exists on the gateway port (catches wedged/hung processes)
+# - HTTP GET /healthz and /readyz on loopback (catches broken HTTP stack)
+#
+# Tailscale note: keeps tailscaled running; OpenClaw's `gateway.tailscale.*` is applied by the
+# gateway process when it starts.
 #
 # Typical install:
 #   sudo install -m 750 scripts/droplet-gateway-watchdog.sh /usr/local/sbin/openclaw-gateway-watchdog.sh
 #   sudo mkdir -p /var/lib/openclaw && sudo chmod 700 /var/lib/openclaw
-#   echo '*/2 * * * * root /usr/local/sbin/openclaw-gateway-watchdog.sh' | sudo tee /etc/cron.d/openclaw-gateway-watchdog
+#   sudo install -m 644 scripts/droplet-gateway-watchdog.service /etc/systemd/system/
+#   sudo install -m 644 scripts/droplet-gateway-watchdog.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now openclaw-gateway-watchdog.timer
 #
 # See docs/platforms/digitalocean.md → "Gateway watchdog".
 set -euo pipefail
@@ -28,7 +35,7 @@ log_msg() {
 
 require_root() {
   if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
-    echo "error: run as root (cron or sudo)" >&2
+    echo "error: run as root (cron or systemd timer)" >&2
     exit 1
   fi
 }
@@ -42,6 +49,7 @@ export DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${XDG_RUN
 UNIT="${OPENCLAW_GATEWAY_UNIT:-openclaw-gateway.service}"
 PORT="${OPENCLAW_GATEWAY_PORT:-18789}"
 HEALTH_URL="${OPENCLAW_GATEWAY_HEALTH_URL:-http://127.0.0.1:${PORT}/healthz}"
+READY_URL="${OPENCLAW_GATEWAY_READY_URL:-http://127.0.0.1:${PORT}/readyz}"
 CURL_TIMEOUT="${OPENCLAW_GATEWAY_CURL_TIMEOUT:-4}"
 
 TAILSCALED_UNIT="${OPENCLAW_TAILSCALED_UNIT:-tailscaled.service}"
@@ -50,7 +58,8 @@ STATE_DIR="${OPENCLAW_WATCHDOG_STATE_DIR:-/var/lib/openclaw}"
 FAIL_STREAK_FILE="${STATE_DIR}/watchdog.fail-streak"
 RESTART_LOG="${STATE_DIR}/watchdog.restarts.tsv"
 
-FAILS_BEFORE_RESTART="${OPENCLAW_WATCHDOG_FAILS_BEFORE_RESTART:-2}"
+# Consecutive failures of health+ready (listener missing restarts immediately, no streak).
+FAILS_BEFORE_RESTART="${OPENCLAW_WATCHDOG_FAILS_BEFORE_RESTART:-1}"
 RESTART_WINDOW_SEC="${OPENCLAW_WATCHDOG_RESTART_WINDOW_SEC:-3600}"
 MAX_RESTARTS_PER_WINDOW="${OPENCLAW_WATCHDOG_MAX_RESTARTS_PER_WINDOW:-8}"
 
@@ -91,7 +100,6 @@ count_recent_restarts() {
 append_restart_record() {
   local reason="$1"
   printf "%s\t%s\n" "$(now_epoch)" "$reason" >>"$RESTART_LOG"
-  # keep file bounded (~500 lines)
   if [[ -f "$RESTART_LOG" ]]; then
     local lines
     lines=$(wc -l <"$RESTART_LOG" | tr -d " ")
@@ -129,9 +137,22 @@ gateway_active() {
   systemctl --user is-active --quiet "$UNIT" 2>/dev/null
 }
 
-gateway_health_ok() {
+gateway_listen_ok() {
+  if ! command -v ss >/dev/null 2>&1; then
+    return 1
+  fi
+  # Match listeners on :PORT (IPv4/IPv6)
+  ss -ltn 2>/dev/null | grep -E ":${PORT}\\s" >/dev/null 2>&1
+}
+
+curl_ok() {
+  local url="$1"
   command -v curl >/dev/null 2>&1 || return 1
-  curl -fsS --max-time "$CURL_TIMEOUT" "$HEALTH_URL" >/dev/null 2>&1
+  curl -fsS --max-time "$CURL_TIMEOUT" "$url" >/dev/null 2>&1
+}
+
+gateway_probes_ok() {
+  curl_ok "$HEALTH_URL" && curl_ok "$READY_URL"
 }
 
 restart_gateway() {
@@ -160,7 +181,15 @@ if ! gateway_active; then
   exit 0
 fi
 
-if gateway_health_ok; then
+if ! gateway_listen_ok; then
+  log_msg "no TCP listener on port ${PORT} while unit reports active"
+  if restart_gateway "no-listener"; then
+    : >"$FAIL_STREAK_FILE" || true
+  fi
+  exit 0
+fi
+
+if gateway_probes_ok; then
   : >"$FAIL_STREAK_FILE" 2>/dev/null || true
   exit 0
 fi
@@ -171,13 +200,13 @@ if [[ -f "$FAIL_STREAK_FILE" ]] && [[ "$(cat "$FAIL_STREAK_FILE" 2>/dev/null)" =
 fi
 streak=$((prev + 1))
 echo "$streak" >"$FAIL_STREAK_FILE"
-log_msg "health check failed (${HEALTH_URL}) streak=${streak}/${FAILS_BEFORE_RESTART}"
+log_msg "probe failed (health+ready) streak=${streak}/${FAILS_BEFORE_RESTART} health=${HEALTH_URL} ready=${READY_URL}"
 
 if [[ "$streak" -lt "$FAILS_BEFORE_RESTART" ]]; then
   exit 0
 fi
 
-if restart_gateway "health-failed"; then
+if restart_gateway "health-ready-failed"; then
   : >"$FAIL_STREAK_FILE" || true
 fi
 

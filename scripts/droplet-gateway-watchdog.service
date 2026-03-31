@@ -1,0 +1,15 @@
+# Install on the droplet (paths are server paths):
+#   sudo install -m 644 scripts/droplet-gateway-watchdog.service /etc/systemd/system/openclaw-gateway-watchdog.service
+#   sudo install -m 644 scripts/droplet-gateway-watchdog.timer /etc/systemd/system/openclaw-gateway-watchdog.timer
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now openclaw-gateway-watchdog.timer
+#
+# Optional: remove legacy cron after verifying the timer:
+#   sudo rm -f /etc/cron.d/openclaw-gateway-watchdog
+[Unit]
+Description=OpenClaw droplet gateway watchdog (one-shot)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/openclaw-gateway-watchdog.sh

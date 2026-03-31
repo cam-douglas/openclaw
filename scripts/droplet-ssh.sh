@@ -23,8 +23,13 @@ set -a
 source "$ENV_FILE"
 set +a
 
-DROPLET_IP="${DROPLET_IP:?Set DROPLET_IP in $ENV_FILE}"
-TARGET="${SSH_USER:-root}@${DROPLET_IP}"
+# DROPLET_SSH_HOST: Tailscale 100.x or MagicDNS (preferred over public DROPLET_IP once SSH is firewalled).
+if [[ -z "${DROPLET_SSH_HOST:-}" && -z "${DROPLET_IP:-}" ]]; then
+  echo "error: set DROPLET_SSH_HOST or DROPLET_IP in $ENV_FILE" >&2
+  exit 1
+fi
+SSH_HOST="${DROPLET_SSH_HOST:-$DROPLET_IP}"
+TARGET="${SSH_USER:-root}@${SSH_HOST}"
 
 # shellcheck source=scripts/droplet-ssh-common.sh
 source "$ROOT/scripts/droplet-ssh-common.sh"

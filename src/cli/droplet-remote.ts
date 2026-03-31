@@ -60,9 +60,26 @@ function resolveDropletLocalTuiForwardPort(): number {
 }
 
 /**
+ * SSH destination host: prefer `DROPLET_SSH_HOST` (Tailscale 100.x or MagicDNS name) over public
+ * `DROPLET_IP` so you can route SSH over tailnet after firewall hardening.
+ */
+export function resolveDropletSshTargetHost(env: NodeJS.ProcessEnv = process.env): string {
+  const sshHost = env.DROPLET_SSH_HOST?.trim();
+  if (sshHost) {
+    return sshHost;
+  }
+  const ip = env.DROPLET_IP?.trim();
+  if (ip) {
+    return ip;
+  }
+  return "";
+}
+
+/**
  * Remote host for `ssh -L local:host:18789` (where the gateway listens on the VPS).
- * When `gateway.bind` is `tailnet`, the gateway may not listen on loopback; set this to the
- * droplet's Tailscale IPv4 (for example from `tailscale ip -4` on the server).
+ * When `gateway.tailscale.mode` is `serve` (or funnel), the gateway binds loopback; use
+ * `127.0.0.1`. When `gateway.bind` is `tailnet`, set this to the droplet Tailscale IPv4 (for example
+ * from `tailscale ip -4` on the server).
  */
 export function resolveDropletSshForwardHost(env: NodeJS.ProcessEnv = process.env): string {
   const raw = env.OPENCLAW_DROPLET_SSH_FORWARD_HOST?.trim();
@@ -127,7 +144,8 @@ function runDropletLocalTuiViaSshTunnel(params: {
   ];
 
   try {
-    // Run local TUI (interactive).
+    // Run local TUI (interactive). No LLM calls from this helper — local `openclaw tui` talks to
+    // the gateway WebSocket only.
     const env = { ...process.env };
     // Droplet-exclusive: ensure the macOS completion sound is enabled for the tunneled TUI,
     // even if the user disabled it for local gateway runs.
@@ -140,9 +158,12 @@ function runDropletLocalTuiViaSshTunnel(params: {
     const local = spawnSync("openclaw", tuiArgv, { stdio: "inherit", env });
     if (local.error) {
       console.error("[openclaw] droplet: failed to run local tui:", local.error.message);
+      revokeDropletLocalSudoGate();
       process.exit(1);
     }
-    process.exit(local.status ?? 1);
+    const code = local.status ?? 1;
+    revokeDropletLocalSudoGate();
+    process.exit(code);
   } finally {
     ssh.kill("SIGTERM");
   }
@@ -153,7 +174,7 @@ function runDropletLocalTuiViaSshTunnel(params: {
  * Load it here so `openclaw tui droplet` works from $HOME with secrets only in the checkout.
  */
 export function tryLoadDropletIpFromHomeCheckoutEnv(): void {
-  if (process.env.DROPLET_IP?.trim()) {
+  if (process.env.DROPLET_IP?.trim() || process.env.DROPLET_SSH_HOST?.trim()) {
     return;
   }
   const homeCheckoutEnv = path.join(os.homedir(), "openclaw", ".env");
@@ -390,7 +411,7 @@ export function buildDropletRemoteBashLcLine(
 }
 
 /**
- * If argv ends with `droplet`, run `sudo -v`, SSH to DROPLET_IP, run `openclaw <args>` on the
+ * If argv ends with `droplet`, run `sudo -v`, SSH to `DROPLET_SSH_HOST` or `DROPLET_IP`, run `openclaw <args>` on the
  * server, then `sudo -k`. Exits the process.
  * @returns true if handled (caller should return)
  */
@@ -411,17 +432,17 @@ export function tryHandleDropletRemoteCli(argv: string[]): boolean {
   tryLoadDropletIpFromHomeCheckoutEnv();
   mergeDropletForwardGatewayEnvFromEnvFiles(process.env);
 
-  const ip = process.env.DROPLET_IP?.trim();
-  if (!ip) {
+  const targetHost = resolveDropletSshTargetHost();
+  if (!targetHost) {
     console.error(
-      "[openclaw] Trailing `droplet` requires DROPLET_IP. Add it to ~/.openclaw/.env, or ~/openclaw/.env, or export DROPLET_IP (or OPENCLAW_ENV_FILE pointing at an env file).",
+      "[openclaw] Trailing `droplet` requires DROPLET_SSH_HOST or DROPLET_IP. Add one to ~/.openclaw/.env, ~/openclaw/.env, or export it (or OPENCLAW_ENV_FILE pointing at an env file). Use DROPLET_SSH_HOST for Tailscale (100.x or MagicDNS) when SSH is not exposed on the public IP.",
     );
     process.exit(2);
     return true;
   }
 
   const user = process.env.SSH_USER?.trim() || "root";
-  const target = `${user}@${ip}`;
+  const target = `${user}@${targetHost}`;
   const forward = applyDropletTuiDefaultSession(stripped.slice(2));
   const remoteBin = remoteOpenClawBin();
 
@@ -445,11 +466,12 @@ export function tryHandleDropletRemoteCli(argv: string[]): boolean {
     return true;
   }
 
+  // Local sudo gate must run before any SSH (including the macOS tunneled TUI path).
+  refreshDropletLocalSudoGate();
+
   if (forward[0] === "tui" && process.platform === "darwin") {
     runDropletLocalTuiViaSshTunnel({ target, sshOpts, forward });
   }
-
-  refreshDropletLocalSudoGate();
 
   const remoteLine = buildDropletRemoteBashLcLine(remoteBin, forward);
   const sshRemoteArgv = buildDropletRemoteSshShellCommand(remoteLine, {

@@ -64,6 +64,7 @@ import {
   playDropletRemoteCompletionChime,
   isTrailingDropletRemoteInvocation,
   resolveDropletSshForwardHost,
+  resolveDropletSshTargetHost,
   stripTrailingDroplet,
   tryLoadDropletIpFromHomeCheckoutEnv,
   tryHandleDropletRemoteCli,
@@ -399,6 +400,25 @@ describe("buildDropletRemoteBashLcLine", () => {
   });
 });
 
+describe("resolveDropletSshTargetHost", () => {
+  it("prefers DROPLET_SSH_HOST over DROPLET_IP", () => {
+    expect(
+      resolveDropletSshTargetHost({
+        DROPLET_SSH_HOST: "100.64.0.2",
+        DROPLET_IP: "203.0.113.1",
+      }),
+    ).toBe("100.64.0.2");
+  });
+
+  it("uses DROPLET_IP when DROPLET_SSH_HOST is unset", () => {
+    expect(resolveDropletSshTargetHost({ DROPLET_IP: "203.0.113.1" })).toBe("203.0.113.1");
+  });
+
+  it("returns empty when neither is set", () => {
+    expect(resolveDropletSshTargetHost({})).toBe("");
+  });
+});
+
 describe("resolveDropletSshForwardHost", () => {
   it("defaults to loopback when unset", () => {
     expect(resolveDropletSshForwardHost({})).toBe("127.0.0.1");
@@ -443,11 +463,14 @@ describe("tryHandleDropletRemoteCli (tui droplet)", () => {
 
   beforeEach(() => {
     mockedSpawn.mockClear();
+    // Isolate from developer shell / ~/.profile (e.g. OPENCLAW_DROPLET_SSH_FORWARD_HOST).
+    delete process.env.OPENCLAW_DROPLET_SSH_FORWARD_HOST;
   });
 
   afterEach(() => {
     Object.defineProperty(process, "platform", { value: originalPlatform });
     delete process.env.DROPLET_IP;
+    delete process.env.DROPLET_SSH_HOST;
     delete process.env.SSH_USER;
     delete process.env.OPENCLAW_GATEWAY_TOKEN;
     delete process.env.OPENCLAW_DROPLET_TUI_FORWARD_PORT;
@@ -510,6 +533,30 @@ describe("tryHandleDropletRemoteCli (tui droplet)", () => {
     expect(mockedSpawn).toHaveBeenCalledWith(
       "ssh",
       expect.arrayContaining(["-L", "18791:100.126.96.38:18789"]),
+      expect.objectContaining({ stdio: "inherit" }),
+    );
+  });
+
+  it("uses DROPLET_SSH_HOST for ssh target when set", () => {
+    Object.defineProperty(process, "platform", { value: "darwin" });
+    process.env.DROPLET_SSH_HOST = "100.64.0.2";
+    process.env.DROPLET_IP = "203.0.113.10";
+    process.env.SSH_USER = "root";
+    process.env.OPENCLAW_GATEWAY_TOKEN = "tok";
+    process.env.OPENCLAW_DROPLET_TUI_FORWARD_PORT = "18791";
+    process.env.OPENCLAW_DROPLET_SUDO_GATE = "0";
+
+    vi.spyOn(process, "exit").mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code ?? "unknown"})`);
+    }) as never);
+
+    expect(() =>
+      tryHandleDropletRemoteCli(["node", "openclaw", "tui", "--session", "main", "droplet"]),
+    ).toThrow(/process\.exit/);
+
+    expect(mockedSpawn).toHaveBeenCalledWith(
+      "ssh",
+      expect.arrayContaining(["root@100.64.0.2"]),
       expect.objectContaining({ stdio: "inherit" }),
     );
   });

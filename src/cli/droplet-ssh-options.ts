@@ -49,5 +49,16 @@ export function buildDropletSshClientOptions(env: NodeJS.ProcessEnv): string[] {
     opts.push("-o", "StrictHostKeyChecking=accept-new");
   }
 
+  // Optional: disable ssh-agent for this connection so an encrypted key prompts for passphrase
+  // (use with OPENCLAW_DROPLET_SSH_IDENTITY). Does not affect server-side auth policy.
+  if (env.OPENCLAW_DROPLET_SSH_IDENTITY_AGENT_NONE?.trim() === "1") {
+    opts.push("-o", "IdentityAgent=none");
+  }
+
+  const identity = env.OPENCLAW_DROPLET_SSH_IDENTITY?.trim();
+  if (identity) {
+    opts.push("-o", `IdentityFile=${identity}`);
+  }
+
   return opts;
 }

@@ -45,5 +45,13 @@ droplet_ssh_build_opts() {
   else
     DROPLET_SSH_OPTS+=( -o StrictHostKeyChecking=accept-new )
   fi
+
+  # Optional: match `src/cli/droplet-ssh-options.ts` — disable agent so encrypted keys prompt (client-side).
+  if [[ "${OPENCLAW_DROPLET_SSH_IDENTITY_AGENT_NONE:-}" == "1" ]]; then
+    DROPLET_SSH_OPTS+=( -o IdentityAgent=none )
+  fi
+  if [[ -n "${OPENCLAW_DROPLET_SSH_IDENTITY:-}" ]]; then
+    DROPLET_SSH_OPTS+=( -o "IdentityFile=${OPENCLAW_DROPLET_SSH_IDENTITY}" )
+  fi
   return 0
 }

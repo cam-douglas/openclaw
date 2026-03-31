@@ -70,9 +70,35 @@ ssh root@YOUR_DROPLET_IP
 sudo -k
 ```
 
+### SSH over Tailscale (recommended)
+
+The droplet still has a **public** IPv4 from the provider. To **stop using that address for SSH**:
+
+1. Install and log in to **Tailscale** on the droplet and your Mac (`tailscale up`).
+2. Note the droplet **tailnet** address (`tailscale ip -4` on the server, usually `100.x`).
+3. Set **`DROPLET_SSH_HOST`** to that address (or a MagicDNS name) in your Mac `.env`, **or** keep using `DROPLET_IP` until you are ready to switch.
+4. **Before** blocking port 22 on the public interface, confirm `ssh root@<100.x>` works from your Mac.
+
+**Restrict SSH to Tailscale only (UFW on the droplet)**
+
+Review `scripts/droplet-ufw-ssh-tailscale-only.sh` (it resets UFW defaults). Run only when you have **console access** (DigitalOcean web console or another path) if something goes wrong:
+
+```bash
+sudo ./scripts/droplet-ufw-ssh-tailscale-only.sh
+```
+
+This allows inbound **TCP 22 only on `tailscale0`**. SSH to the **public** IP on port 22 should then fail; use the tailnet address instead.
+
+Also consider a **cloud firewall** (DigitalOcean Firewalls) that allows SSH only from Tailscale exit nodes or your home IP, as a belt-and-suspenders layer.
+
+**Passphrases and sudo**
+
+- **SSH key passphrase**: enforced on the **client** (your Mac). OpenSSH cannot require “unlock this key every time” from the server. Use **`ssh-agent`** for convenience, or set **`OPENCLAW_DROPLET_SSH_IDENTITY_AGENT_NONE=1`** and **`OPENCLAW_DROPLET_SSH_IDENTITY`** so each connection can prompt for the key passphrase (see `.env.example`).
+- **Server `sudo` password**: unrelated to SSH; configure in `/etc/sudoers` on the droplet. The repo’s **`sudo -v` before SSH** is a **local Mac** gate so droplet helpers are not run without unlocking your Mac’s sudo first.
+
 ### Local `.env` (optional, repo checkout on your Mac)
 
-The repo root is gitignored for `.env`. Copy `.env.example` to `.env` and set `DROPLET_IP`, SSH user, and any API keys you use locally. Use `./scripts/droplet-ssh.sh` or `./scripts/droplet-tunnel.sh` instead of raw `ssh` so access stays sudo-gated.
+The repo root is gitignored for `.env`. Copy `.env.example` to `.env` and set `DROPLET_IP` (or `DROPLET_SSH_HOST` for tailnet-only SSH), SSH user, and any API keys you use locally. Use `./scripts/droplet-ssh.sh` or `./scripts/droplet-tunnel.sh` instead of raw `ssh` so access stays sudo-gated.
 
 Prefer **SSH keys** over storing a server password in `.env`.
 
@@ -385,15 +411,17 @@ tar -czvf openclaw-backup.tar.gz ~/.openclaw ~/.openclaw/workspace
 
 ## Gateway watchdog (optional)
 
-Your systemd user unit should already restart the gateway process when it crashes (`Restart=…`). A **watchdog** adds a second layer: if the process is **running but wedged** (no HTTP listener, health endpoint failing), or if **`tailscaled` stopped**, the script can recover automatically.
+Your systemd user unit should already restart the gateway process when it crashes (`Restart=…`). A **watchdog** adds a second layer: if the unit is **active** but **nothing is listening**, if HTTP **`/healthz`** or **`/readyz`** fail, or if **`tailscaled` stopped**, the script can recover automatically.
 
-Use the repo script (review before install):
+Use the repo files (review before install):
 
 - `scripts/droplet-gateway-watchdog.sh`
+- `scripts/droplet-gateway-watchdog.service` + `scripts/droplet-gateway-watchdog.timer` (preferred schedule)
+- Legacy: root **cron** every 2 minutes (still documented below if you prefer cron)
 
 **Security model**
 
-- No secrets in the script; it only curls **`http://127.0.0.1:<port>/healthz`** (localhost).
+- No secrets; only **`curl` to loopback** and local checks (**`ss`** for the gateway port). It does **not** run `openclaw` or call any **LLM provider**.
 - Restarts are **rate-limited** (see env vars in the script header) so a bad config cannot restart in a tight loop forever.
 - Controls **`tailscaled`** with **`systemctl`** (same as normal Linux service management). If the node is **not logged in** to Tailscale (`tailscale up` never completed), the script logs a warning; it cannot complete interactive login for you.
 
@@ -402,18 +430,30 @@ Use the repo script (review before install):
 - Tailscale adds a **tailnet address** (`100.x`) for clients on your tailnet. It does **not** remove the provider’s public IP from existing; you still choose whether SSH uses the public IP or Tailscale.
 - When **`gateway.tailscale.mode`** is **`serve`** (or funnel), OpenClaw coordinates **`tailscale serve`** while the gateway binds **loopback**; the watchdog keeps **`tailscaled`** up so that path can work again after failures.
 
-**Install on the droplet (example)**
+**Install on the droplet (systemd timer — recommended)**
 
 ```bash
 sudo install -m 750 /root/openclaw/scripts/droplet-gateway-watchdog.sh /usr/local/sbin/openclaw-gateway-watchdog.sh
 sudo mkdir -p /var/lib/openclaw
 sudo chmod 700 /var/lib/openclaw
+sudo install -m 644 /root/openclaw/scripts/droplet-gateway-watchdog.service /etc/systemd/system/openclaw-gateway-watchdog.service
+sudo install -m 644 /root/openclaw/scripts/droplet-gateway-watchdog.timer /etc/systemd/system/openclaw-gateway-watchdog.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now openclaw-gateway-watchdog.timer
+```
 
-# Every 2 minutes (root cron)
+After verifying logs (`journalctl -u openclaw-gateway-watchdog.service -n 50`), you can remove legacy cron if present: `sudo rm -f /etc/cron.d/openclaw-gateway-watchdog`.
+
+**Alternative: root cron (every 2 minutes)**
+
+```bash
+sudo install -m 750 /root/openclaw/scripts/droplet-gateway-watchdog.sh /usr/local/sbin/openclaw-gateway-watchdog.sh
+sudo mkdir -p /var/lib/openclaw
+sudo chmod 700 /var/lib/openclaw
 echo '*/2 * * * * root /usr/local/sbin/openclaw-gateway-watchdog.sh' | sudo tee /etc/cron.d/openclaw-gateway-watchdog
 ```
 
-Optional tuning via environment (same cron line, or a tiny wrapper): see comments in `scripts/droplet-gateway-watchdog.sh` for `OPENCLAW_WATCHDOG_*`, `OPENCLAW_GATEWAY_*`, and `OPENCLAW_TAILSCALED_UNIT`.
+Optional tuning via environment: see comments in `scripts/droplet-gateway-watchdog.sh` for `OPENCLAW_WATCHDOG_*`, `OPENCLAW_GATEWAY_*`, and `OPENCLAW_TAILSCALED_UNIT`.
 
 ---
 

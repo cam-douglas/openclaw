@@ -10,21 +10,27 @@ describe("buildDropletSshClientOptions", () => {
   });
 
   it("uses accept-new when no strict mode and no known_hosts", () => {
-    const opts = buildDropletSshClientOptions({});
-    expect(opts).toEqual(
-      expect.arrayContaining([
-        "-o",
-        "ConnectTimeout=20",
-        "-o",
-        "IdentitiesOnly=yes",
-        "-o",
-        "ServerAliveInterval=30",
-        "-o",
-        "ServerAliveCountMax=3",
-        "-o",
-        "StrictHostKeyChecking=accept-new",
-      ]),
-    );
+    const dir = mkdtempSync(join(tmpdir(), "oc-droplet-no-kh-"));
+    vi.spyOn(process, "cwd").mockReturnValue(dir);
+    try {
+      const opts = buildDropletSshClientOptions({});
+      expect(opts).toEqual(
+        expect.arrayContaining([
+          "-o",
+          "ConnectTimeout=20",
+          "-o",
+          "IdentitiesOnly=yes",
+          "-o",
+          "ServerAliveInterval=30",
+          "-o",
+          "ServerAliveCountMax=3",
+          "-o",
+          "StrictHostKeyChecking=accept-new",
+        ]),
+      );
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it("uses strict when OPENCLAW_DROPLET_SSH_STRICT=1", () => {
@@ -55,6 +61,15 @@ describe("buildDropletSshClientOptions", () => {
         OPENCLAW_DROPLET_KNOWN_HOSTS: "/nonexistent/droplet-known_hosts",
       }),
     ).toThrow(/missing file/);
+  });
+
+  it("adds IdentityAgent=none and IdentityFile when set", () => {
+    const opts = buildDropletSshClientOptions({
+      OPENCLAW_DROPLET_SSH_IDENTITY_AGENT_NONE: "1",
+      OPENCLAW_DROPLET_SSH_IDENTITY: "/Users/me/.ssh/id_ed25519",
+    });
+    expect(opts).toContain("IdentityAgent=none");
+    expect(opts.some((o) => o === "IdentityFile=/Users/me/.ssh/id_ed25519")).toBe(true);
   });
 
   it("uses .droplet/known_hosts under cwd when present", () => {

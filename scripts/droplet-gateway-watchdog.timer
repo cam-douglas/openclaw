@@ -1,0 +1,11 @@
+[Unit]
+Description=Run OpenClaw gateway watchdog every minute
+
+[Timer]
+OnBootSec=90
+OnUnitActiveSec=60s
+AccuracySec=15s
+Persistent=true
+
+[Install]
+WantedBy=timers.target
