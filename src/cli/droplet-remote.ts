@@ -139,10 +139,14 @@ function runDropletLocalTuiViaSshTunnel(params: {
 
   // Keep the SSH tunnel open while local `openclaw tui` runs so the macOS completion chime
   // (Funk by default) can play when an agent reply finalizes.
+  // LogLevel=QUIET: without it, OpenSSH spams stderr ("channel N: open failed: Connection refused")
+  // on every local reconnect while the remote gateway is down, which obscures the TUI.
   const ssh = spawn(
     "ssh",
     [
       ...params.sshOpts,
+      "-o",
+      "LogLevel=QUIET",
       "-o",
       "ExitOnForwardFailure=yes",
       "-L",

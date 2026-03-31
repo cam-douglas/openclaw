@@ -40,4 +40,5 @@ droplet_sudo_gate_refresh
 droplet_sudo_revoke_on_exit
 
 # Do not use exec ssh — the EXIT trap must run when the tunnel ends (sudo -k).
-ssh "${DROPLET_SSH_OPTS[@]}" -o ExitOnForwardFailure=yes -L "18789:${FORWARD_HOST}:18789" -N "$TARGET"
+# LogLevel=QUIET avoids stderr spam when the remote gateway is down (channel open failed: connection refused).
+ssh "${DROPLET_SSH_OPTS[@]}" -o LogLevel=QUIET -o ExitOnForwardFailure=yes -L "18789:${FORWARD_HOST}:18789" -N "$TARGET"
