@@ -8,6 +8,9 @@
 #
 # Shell alias (zsh/bash), adjust path to your checkout:
 #   alias oc-droplet='"/path/to/openclaw/scripts/droplet-ssh.sh"'
+#
+# Optional:
+#   OPENCLAW_DROPLET_REMOTE_DIR=/root/openclaw ./scripts/droplet-ssh.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -30,6 +33,7 @@ if [[ -z "${DROPLET_SSH_HOST:-}" && -z "${DROPLET_IP:-}" ]]; then
 fi
 SSH_HOST="${DROPLET_SSH_HOST:-$DROPLET_IP}"
 TARGET="${SSH_USER:-root}@${SSH_HOST}"
+REMOTE_DIR="${OPENCLAW_DROPLET_REMOTE_DIR:-/root/openclaw}"
 
 # shellcheck source=scripts/droplet-ssh-common.sh
 source "$ROOT/scripts/droplet-ssh-common.sh"
@@ -41,4 +45,5 @@ droplet_sudo_gate_refresh
 droplet_sudo_revoke_on_exit
 
 # Do not use exec ssh — the EXIT trap must run when the session ends (sudo -k).
-ssh "${DROPLET_SSH_OPTS[@]}" "$TARGET"
+# Start in the canonical droplet checkout unless overridden.
+ssh -t "${DROPLET_SSH_OPTS[@]}" "$TARGET" "bash -lc 'if [ -d \"$REMOTE_DIR\" ]; then cd \"$REMOTE_DIR\"; fi; exec \${SHELL:-bash} -l'"
