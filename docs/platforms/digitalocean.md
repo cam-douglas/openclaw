@@ -383,6 +383,40 @@ tar -czvf openclaw-backup.tar.gz ~/.openclaw ~/.openclaw/workspace
 
 ---
 
+## Gateway watchdog (optional)
+
+Your systemd user unit should already restart the gateway process when it crashes (`Restart=…`). A **watchdog** adds a second layer: if the process is **running but wedged** (no HTTP listener, health endpoint failing), or if **`tailscaled` stopped**, the script can recover automatically.
+
+Use the repo script (review before install):
+
+- `scripts/droplet-gateway-watchdog.sh`
+
+**Security model**
+
+- No secrets in the script; it only curls **`http://127.0.0.1:<port>/healthz`** (localhost).
+- Restarts are **rate-limited** (see env vars in the script header) so a bad config cannot restart in a tight loop forever.
+- Controls **`tailscaled`** with **`systemctl`** (same as normal Linux service management). If the node is **not logged in** to Tailscale (`tailscale up` never completed), the script logs a warning; it cannot complete interactive login for you.
+
+**Tailscale and “hiding” the droplet IP**
+
+- Tailscale adds a **tailnet address** (`100.x`) for clients on your tailnet. It does **not** remove the provider’s public IP from existing; you still choose whether SSH uses the public IP or Tailscale.
+- When **`gateway.tailscale.mode`** is **`serve`** (or funnel), OpenClaw coordinates **`tailscale serve`** while the gateway binds **loopback**; the watchdog keeps **`tailscaled`** up so that path can work again after failures.
+
+**Install on the droplet (example)**
+
+```bash
+sudo install -m 750 /root/openclaw/scripts/droplet-gateway-watchdog.sh /usr/local/sbin/openclaw-gateway-watchdog.sh
+sudo mkdir -p /var/lib/openclaw
+sudo chmod 700 /var/lib/openclaw
+
+# Every 2 minutes (root cron)
+echo '*/2 * * * * root /usr/local/sbin/openclaw-gateway-watchdog.sh' | sudo tee /etc/cron.d/openclaw-gateway-watchdog
+```
+
+Optional tuning via environment (same cron line, or a tiny wrapper): see comments in `scripts/droplet-gateway-watchdog.sh` for `OPENCLAW_WATCHDOG_*`, `OPENCLAW_GATEWAY_*`, and `OPENCLAW_TAILSCALED_UNIT`.
+
+---
+
 ## Oracle Cloud Free Alternative
 
 Oracle Cloud offers **Always Free** ARM instances that are significantly more powerful than any paid option here — for $0/month.
