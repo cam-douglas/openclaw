@@ -27,6 +27,21 @@ if [[ ! -f "$ENV_FILE" ]]; then
   exit 1
 fi
 
+# Clear inherited secret env vars first so removed keys in .env do not linger
+# from the parent shell and accidentally win during render mapping.
+for key in \
+  OPENAI_API_KEY OPENAI_API_KEY_DROPLET \
+  ANTHROPIC_API_KEY ANTHROPIC_API_KEY_DROPLET \
+  OPENROUTER_API_KEY OPENROUTER_API_KEY_DROPLET \
+  GROK_API_KEY GROK_API_KEY_DROPLET \
+  GEMINI_API_KEY GEMINI_API_KEY_DROPLET \
+  HUGGINGFACE_API_KEY HUGGINGFACE_API_KEY_DROPLET HF_TOKEN \
+  KIMI_API_KEY KIMI_API_KEY_DROPLET \
+  MOONSHOT_API_KEY MOONSHOT_API_KEY_DROPLET
+do
+  unset "$key" || true
+done
+
 # shellcheck source=/dev/null
 set -a
 source "$ENV_FILE"

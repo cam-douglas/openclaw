@@ -16,6 +16,14 @@ def opt(name: str) -> str | None:
     return v or None
 
 
+def first_opt(*names: str) -> str | None:
+    for name in names:
+        value = opt(name)
+        if value:
+            return value
+    return None
+
+
 def emit_line(key: str, value: str) -> None:
     # systemd EnvironmentFile: KEY=value; escape minimal newlines
     if "\n" in value:
@@ -34,14 +42,15 @@ def main() -> None:
     emit_line("OPENCLAW_AUTH_STORE_READONLY", "1")
 
     pairs: list[tuple[str, str | None]] = [
-        ("OPENAI_API_KEY", opt("OPENAI_API_KEY_DROPLET")),
-        ("ANTHROPIC_API_KEY", opt("ANTHROPIC_API_KEY_DROPLET")),
-        ("OPENROUTER_API_KEY", opt("OPENROUTER_API_KEY_DROPLET")),
-        ("XAI_API_KEY", opt("GROK_API_KEY_DROPLET")),
-        ("GEMINI_API_KEY", opt("GEMINI_API_KEY_DROPLET")),
-        ("HF_TOKEN", opt("HUGGINGFACE_API_KEY_DROPLET")),
-        ("KIMI_API_KEY", opt("KIMI_API_KEY_DROPLET") or opt("KIMI_API_KEY")),
-        ("MOONSHOT_API_KEY", opt("MOONSHOT_API_KEY_DROPLET") or opt("MOONSHOT_API_KEY")),
+        # Prefer explicit *_DROPLET values, then fall back to canonical local keys.
+        ("OPENAI_API_KEY", first_opt("OPENAI_API_KEY_DROPLET", "OPENAI_API_KEY")),
+        ("ANTHROPIC_API_KEY", first_opt("ANTHROPIC_API_KEY_DROPLET", "ANTHROPIC_API_KEY")),
+        ("OPENROUTER_API_KEY", first_opt("OPENROUTER_API_KEY_DROPLET", "OPENROUTER_API_KEY")),
+        ("XAI_API_KEY", first_opt("GROK_API_KEY_DROPLET", "GROK_API_KEY")),
+        ("GEMINI_API_KEY", first_opt("GEMINI_API_KEY_DROPLET", "GEMINI_API_KEY")),
+        ("HF_TOKEN", first_opt("HUGGINGFACE_API_KEY_DROPLET", "HUGGINGFACE_API_KEY", "HF_TOKEN")),
+        ("KIMI_API_KEY", first_opt("KIMI_API_KEY_DROPLET", "KIMI_API_KEY")),
+        ("MOONSHOT_API_KEY", first_opt("MOONSHOT_API_KEY_DROPLET", "MOONSHOT_API_KEY")),
         ("BASE_RPC_URL", opt("BASE_RPC_URL")),
         ("BINANCE_API_KEY", opt("BINANCE_API_KEY")),
         ("BINANCE_API_SECRET", opt("BINANCE_API_SECRET")),
@@ -59,6 +68,8 @@ def main() -> None:
         ("MESSARI_API_KEY", opt("MESSARI_API_KEY")),
         ("COIN_MARKET_CAP_API_KEY", opt("COIN_MARKET_CAP_API_KEY")),
         ("FREECRYPTOAPI_API_KEY", opt("FREECRYPTOAPI_API_KEY")),
+        ("MEM0_API_KEY", first_opt("MEM0_API_KEY_DROPLET", "MEM0_API_KEY")),
+        ("MEM0_USER_ID", first_opt("MEM0_USER_ID_DROPLET", "MEM0_USER_ID")),
     ]
 
     for key, val in pairs:
