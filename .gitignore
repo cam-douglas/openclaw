@@ -144,3 +144,10 @@ changelog/fragments/
 
 # Local scratch workspace
 .tmp/
+
+# Large GPU migration pack binaries (GitHub ~100MB limit; keep locally or external storage)
+transfer/openclaw-gpu-migration-*.tar.gz
+transfer/**/openclaw-state.tar
+transfer/**/openclaw-source.bundle
+# May contain provider keys (never commit)
+transfer/**/openclaw-config.tar

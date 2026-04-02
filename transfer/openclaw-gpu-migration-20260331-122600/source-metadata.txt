@@ -1,0 +1,9 @@
+captured_at_utc=2026-03-31T12:26:27Z
+host=ubuntu-s-1vcpu-2gb-70gb-intel-syd1-01
+gateway_user_active=active
+watchdog_timer_active=active
+watchdog_timer_enabled=enabled
+root_linger=yes
+listener_18789=LISTEN 0      511                      127.0.0.1:18789      0.0.0.0:*    users:(("openclaw-gatewa",pid=78547,fd=22))            ;LISTEN 0      511                          [::1]:18789         [::]:*    users:(("openclaw-gatewa",pid=78547,fd=23))            ;
+tailscale_ipv4=100.126.96.38,
+tailscale_ipv6=fd7a:115c:a1e0::9c01:60b2,
